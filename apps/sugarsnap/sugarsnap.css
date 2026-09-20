@@ -128,6 +128,7 @@ body { overflow: hidden; overscroll-behavior: none; }
   width: 100%;
   height: 100%;
   position: relative;
+  overflow: hidden;
   border-radius: 26%;
   display: grid;
   place-items: center;
@@ -140,6 +141,19 @@ body { overflow: hidden; overscroll-behavior: none; }
   transition: filter .18s ease, transform .12s ease;
 }
 .tile-face svg { width: 74%; height: 74%; display: block; }
+
+/* Light sweep used by the reveal; idle and invisible until animated. */
+.tile-face::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: linear-gradient(114deg,
+    transparent 38%, rgba(255,255,255,.92) 50%, transparent 62%);
+  opacity: 0;
+  pointer-events: none;
+}
 
 .tile.free { cursor: pointer; }
 .tile.free:hover .tile-face { transform: translateY(-3px); filter: brightness(1.05); }
@@ -163,11 +177,89 @@ body { overflow: hidden; overscroll-behavior: none; }
   50% { box-shadow: inset 0 3px 0 rgba(255,255,255,.95), 0 0 0 4px #ffe680, 0 7px 14px rgba(0,0,0,.3); }
 }
 
-.tile.popping { animation: pop .34s cubic-bezier(.3,1.4,.5,1) forwards; pointer-events: none; }
-@keyframes pop {
-  0%   { transform: translate3d(var(--tx),var(--ty),0) scale(var(--ts,1)); opacity: 1; }
-  38%  { transform: translate3d(var(--tx),var(--ty),0) scale(calc(var(--ts,1) * 1.3)); opacity: 1; }
-  100% { transform: translate3d(var(--tx),var(--ty),0) scale(calc(var(--ts,1) * .15)); opacity: 0; }
+/* A match is a merge: the three slide into the middle one, swell, then pop.
+   --mx/--my is that meeting point, set when the match resolves. */
+.tile.popping { animation: merge .5s forwards; pointer-events: none; }
+@keyframes merge {
+  /* Beat one: all three swell in place, so you read them as three. */
+  0% {
+    transform: translate3d(var(--tx),var(--ty),0) scale(var(--ts,1));
+    opacity: 1;
+    animation-timing-function: cubic-bezier(.3,1.5,.6,1);
+  }
+  /* Beat two: they slide together, slow out of the gather, fast into it. */
+  22% {
+    transform: translate3d(var(--tx),var(--ty),0) scale(calc(var(--ts,1) * 1.16));
+    opacity: 1;
+    animation-timing-function: cubic-bezier(.55,0,.35,1);
+  }
+  /* Beat three: met, then one last swell before they go. */
+  62% {
+    transform: translate3d(var(--mx,var(--tx)),var(--my,var(--ty)),0) scale(calc(var(--ts,1) * 1.14));
+    opacity: 1;
+    animation-timing-function: cubic-bezier(.3,1.6,.5,1);
+  }
+  78% {
+    transform: translate3d(var(--mx,var(--tx)),var(--my,var(--ty)),0) scale(calc(var(--ts,1) * 1.46));
+    opacity: 1;
+    animation-timing-function: ease-in;
+  }
+  100% {
+    transform: translate3d(var(--mx,var(--tx)),var(--my,var(--ty)),0) scale(calc(var(--ts,1) * .08));
+    opacity: 0;
+  }
+}
+
+/* Ring thrown off at the meeting point. */
+.shockwave {
+  position: absolute;
+  top: 0; left: 0;
+  z-index: 80;
+  border-radius: 50%;
+  border: 4px solid #fff;
+  pointer-events: none;
+  animation: ringOut .6s cubic-bezier(.16,.72,.28,1) forwards;
+}
+@keyframes ringOut {
+  0%   { transform: translate3d(var(--sx),var(--sy),0) scale(.4);  opacity: .95; border-width: 5px; }
+  100% { transform: translate3d(var(--sx),var(--sy),0) scale(2.7); opacity: 0;   border-width: 1px; }
+}
+
+/* Soft bloom behind the merge, so the pop reads as light not just motion. */
+.match-flash {
+  position: absolute;
+  top: 0; left: 0;
+  z-index: 65;
+  border-radius: 50%;
+  filter: blur(10px);
+  pointer-events: none;
+  animation: flashOut .42s ease-out forwards;
+}
+@keyframes flashOut {
+  0%   { transform: translate3d(var(--sx),var(--sy),0) scale(.5); opacity: .85; }
+  100% { transform: translate3d(var(--sx),var(--sy),0) scale(2.2); opacity: 0; }
+}
+
+/* The tray registers the hit too. */
+.tray.flash { animation: trayFlash .42s ease-out; }
+@keyframes trayFlash {
+  0%   { box-shadow: inset 0 2px 0 rgba(255,255,255,.4), inset 0 -3px 0 rgba(0,0,0,.25), 0 0 0 0 rgba(255,255,255,.6), 0 6px 16px rgba(0,0,0,.34); }
+  35%  { box-shadow: inset 0 2px 0 rgba(255,255,255,.85), inset 0 -3px 0 rgba(0,0,0,.25), 0 0 0 5px rgba(255,255,255,.3), 0 6px 16px rgba(0,0,0,.34); }
+  100% { box-shadow: inset 0 2px 0 rgba(255,255,255,.4), inset 0 -3px 0 rgba(0,0,0,.25), 0 0 0 0 rgba(255,255,255,0), 0 6px 16px rgba(0,0,0,.34); }
+}
+
+/* ── Reveal: a candy coming out from under another one ─────────────── */
+.tile.revealing .tile-face { animation: revealPop .5s cubic-bezier(.3,1.42,.5,1); }
+@keyframes revealPop {
+  0%   { transform: scale(.88); filter: brightness(1.55) drop-shadow(0 0 0 var(--glow, #fff)); }
+  42%  { transform: scale(1.09); filter: brightness(1.16) drop-shadow(0 0 11px var(--glow, #fff)); }
+  100% { transform: scale(1);   filter: none; }
+}
+.tile.revealing .tile-face::before { animation: shineSweep .52s ease-out; }
+@keyframes shineSweep {
+  0%   { opacity: 0; transform: translateX(-120%); }
+  22%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(120%); }
 }
 
 .tile.landing .tile-face { animation: landSquish .26s ease; }
@@ -176,14 +268,23 @@ body { overflow: hidden; overscroll-behavior: none; }
 /* Sparkles thrown off by a completed match. */
 .spark {
   position: absolute;
+  top: 0; left: 0;
+  z-index: 90;
   width: 11px; height: 11px;
   border-radius: 50%;
   pointer-events: none;
   animation: sparkFly .62s ease-out forwards;
 }
+/* A few squared-off bits keep the burst from reading as uniform dots. */
+.spark-shard { border-radius: 2px; }
 @keyframes sparkFly {
-  0%   { transform: translate3d(var(--sx),var(--sy),0) scale(1); opacity: 1; }
-  100% { transform: translate3d(calc(var(--sx) + var(--dx)), calc(var(--sy) + var(--dy)), 0) scale(0); opacity: 0; }
+  0%   { transform: translate3d(var(--sx),var(--sy),0) scale(1) rotate(0deg); opacity: 1; }
+  70%  { opacity: 1; }
+  100% {
+    transform: translate3d(calc(var(--sx) + var(--dx)), calc(var(--sy) + var(--dy)), 0)
+               scale(.1) rotate(var(--spin, 0deg));
+    opacity: 0;
+  }
 }
 
 /* Floating "+120" score popup. */

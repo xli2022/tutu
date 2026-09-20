@@ -9,6 +9,18 @@
   "use strict";
 
   var CAPACITY = 7;
+  var FLY_MS = 340;        // keep in sync with .tile transition-duration
+  var REVEAL_MS = 520;     // keep in sync with the reveal animations
+  var MERGE_HIT_MS = 330;  // when the three meet and swell inside `merge`
+
+  // Per-candy particle colours, so a burst is tinted like the candy that
+  // made it. Index matches the #candy-N symbols.
+  var CANDY_COLORS = [
+    ["#ff8a9b", "#e8243f"], ["#ffbe6b", "#f2701a"],
+    ["#ffe680", "#f5b813"], ["#9ff08a", "#34a43a"],
+    ["#8fd4ff", "#1878d4"], ["#c9a6ff", "#7433d1"],
+    ["#ffa8d8", "#e0328f"], ["#8ff0e2", "#12a596"]
+  ];
   var SLOT_GAP = 6.4;      // keep in sync with .tray-slots gap
   var TRAY_CHROME = 30;    // tray padding + margin, in px
 
@@ -73,6 +85,8 @@
   var size = 56, traySize = 56, boardOx = 0, boardOy = 0;
   var slotPos = [];
   var hintTimer = null;
+  var pending = 0;         // placements still flying toward the tray
+  var levelToken = 0;      // bumped per level, so stale effects self-cancel
 
   /* ── Helpers ─────────────────────────────────────────────────────── */
   function byId(id) { return tiles[id]; }
@@ -173,13 +187,17 @@
   }
 
   function buildLevel(index) {
+    clearPending();
+    levelToken++;
     var level = LEVELS[index];
     var pos = buildPositions(level);
 
     var palette = shuffle([0, 1, 2, 3, 4, 5, 6, 7]).slice(0, level.types);
     var bag = assignTypes(pos, palette);
 
-    playfield.querySelectorAll(".tile, .spark, .score-pop").forEach(function (n) { n.remove(); });
+    playfield
+      .querySelectorAll(".tile, .spark, .score-pop, .shockwave, .match-flash")
+      .forEach(function (n) { n.remove(); });
 
     tiles = pos.map(function (p, i) {
       var tile = { id: i, type: bag[i], layer: p.layer, ux: p.ux, uy: p.uy, place: "board", el: null };
@@ -209,6 +227,14 @@
     render();
     updateFree();
     updateHud();
+  }
+
+  // Drop any placement still waiting to resolve; its tiles are about to go.
+  function clearPending() {
+    history.forEach(function (r) {
+      if (r.timer) { clearTimeout(r.timer); r.timer = null; }
+    });
+    pending = 0;
   }
 
   function makeTile(t) {
@@ -296,12 +322,35 @@
       var free = isFree(t);
       t.el.classList.toggle("free", free);
       t.el.classList.toggle("locked", !free);
+      // Only celebrate a genuine locked -> free flip, not the initial paint.
+      if (free && t.wasFree === false) reveal(t);
+      t.wasFree = free;
     });
+  }
+
+  // A candy coming out from under another one wakes up: it lifts, a shine
+  // sweeps across it, and it glows for a beat. Kept gentle -- this fires
+  // constantly, so it must not compete with a match.
+  function reveal(t) {
+    var c = CANDY_COLORS[t.type] || CANDY_COLORS[0];
+    var token = levelToken;
+    t.el.style.setProperty("--glow", c[0]);
+    // Beat of delay so the candy that was covering this one has visibly
+    // moved off before the one beneath lights up.
+    setTimeout(function () {
+      if (token !== levelToken || t.place !== "board") return;
+      t.el.classList.remove("revealing");
+      void t.el.offsetWidth;
+      t.el.classList.add("revealing");
+      setTimeout(function () { t.el.classList.remove("revealing"); }, REVEAL_MS);
+    }, 120);
   }
 
   /* ── Playing a tile ──────────────────────────────────────────────── */
   function pick(t) {
     if (status !== "playing" || t.place !== "board" || !isFree(t)) return;
+    // Seven slots is seven slots, even while a match is still landing.
+    if (tray.length >= CAPACITY) return;
     clearHints();
 
     t.place = "tray";
@@ -319,13 +368,31 @@
     var record = { placed: t.id, cleared: [], score: 0 };
     history.push(record);
 
-    var matched = resolve(record);
-    if (!matched) combo = 0;
-
     render();
     updateFree();
     updateHud();
 
+    // Let the candy actually reach the tray before it is allowed to pop.
+    pending++;
+    record.timer = setTimeout(function () {
+      record.timer = null;
+      land(record);
+    }, FLY_MS);
+  }
+
+  // Runs once a placed candy has arrived in its slot.
+  function land(record) {
+    if (!resolve(record)) combo = 0;
+    render();
+    updateHud();
+    pending--;
+    checkEnd();
+  }
+
+  // Win and loss are only decided once nothing is still in the air, so a
+  // triple that is mid-flight never reads as a full tray.
+  function checkEnd() {
+    if (pending > 0 || status !== "playing") return;
     if (tiles.every(function (x) { return x.place === "gone"; })) finish("won");
     else if (tray.length >= CAPACITY) finish("lost");
   }
@@ -346,11 +413,15 @@
       if (byId(tray[i]).type === hit) ids.push(tray[i]);
     }
 
+    // The middle candy of the three is the point they collapse into.
     var where = posOf(byId(ids[1]));
     ids.forEach(function (id) {
       var t = byId(id);
       t.place = "gone";
       tray.splice(tray.indexOf(id), 1);
+      t.el.style.setProperty("--mx", where.x + "px");
+      t.el.style.setProperty("--my", where.y + "px");
+      t.el.style.zIndex = 70;
       t.el.classList.remove("popping");
       void t.el.offsetWidth;          // restart the animation if replayed
       t.el.classList.add("popping");
@@ -362,11 +433,23 @@
     record.score = pts;
     score += pts;
 
-    burst(where, hit);
-    popScore(where, pts);
-    hudScore.classList.remove("bump");
-    void hudScore.offsetWidth;
-    hudScore.classList.add("bump");
+    // Hold the burst until the merge keyframes have actually brought the
+    // three together, otherwise the candies pop before they touch.
+    var token = levelToken;
+    setTimeout(function () {
+      if (token !== levelToken) return;   // level restarted mid-merge
+      shockwave(where, hit);
+      burst(where, hit);
+      popScore(where, pts);
+      trayEl.classList.remove("flash");
+      void trayEl.offsetWidth;
+      trayEl.classList.add("flash");
+      setTimeout(function () { trayEl.classList.remove("flash"); }, 420);
+      hudScore.classList.remove("bump");
+      void hudScore.offsetWidth;
+      hudScore.classList.add("bump");
+    }, MERGE_HIT_MS);
+
     say("Matched three. " + tiles.filter(function (t) { return t.place !== "gone"; }).length + " candies left.");
     return true;
   }
@@ -386,19 +469,52 @@
   var SPARK_COLORS = ["#ffe680", "#ffa8d8", "#8fd4ff", "#9ff08a", "#ffbe6b"];
 
   function burst(at, type) {
-    for (var i = 0; i < 10; i++) {
+    var palette = (CANDY_COLORS[type] || CANDY_COLORS[0]).concat(["#fff", "#ffe680"]);
+    var cx = at.x + traySize / 2;
+    var cy = at.y + traySize / 2;
+
+    for (var i = 0; i < 16; i++) {
       var el = document.createElement("span");
       el.className = "spark";
-      var ang = (Math.PI * 2 * i) / 10 + Math.random();
-      var dist = 34 + Math.random() * 36;
-      el.style.background = SPARK_COLORS[(type + i) % SPARK_COLORS.length];
-      el.style.setProperty("--sx", (at.x + traySize / 2 - 5) + "px");
-      el.style.setProperty("--sy", (at.y + traySize / 2 - 5) + "px");
+      var ang = (Math.PI * 2 * i) / 16 + Math.random() * 0.4;
+      var dist = 38 + Math.random() * 52;
+      var sz = 6 + Math.random() * 9;
+      // A few shards instead of dots gives the burst some grain.
+      if (i % 4 === 0) el.classList.add("spark-shard");
+      el.style.background = palette[i % palette.length];
+      el.style.width = sz + "px";
+      el.style.height = sz + "px";
+      el.style.setProperty("--sx", (cx - sz / 2) + "px");
+      el.style.setProperty("--sy", (cy - sz / 2) + "px");
       el.style.setProperty("--dx", Math.cos(ang) * dist + "px");
       el.style.setProperty("--dy", Math.sin(ang) * dist + "px");
+      el.style.setProperty("--spin", (Math.random() * 720 - 360) + "deg");
+      el.style.animationDuration = (0.52 + Math.random() * 0.34) + "s";
       playfield.appendChild(el);
-      (function (node) { setTimeout(function () { node.remove(); }, 700); })(el);
+      (function (node) { setTimeout(function () { node.remove(); }, 900); })(el);
     }
+  }
+
+  // Expanding ring at the point the three candies collapse into.
+  function shockwave(at, type) {
+    var c = CANDY_COLORS[type] || CANDY_COLORS[0];
+    var ring = document.createElement("span");
+    ring.className = "shockwave";
+    ring.style.borderColor = c[0];
+    ring.style.width = ring.style.height = traySize + "px";
+    ring.style.setProperty("--sx", at.x + "px");
+    ring.style.setProperty("--sy", at.y + "px");
+    playfield.appendChild(ring);
+    setTimeout(function () { ring.remove(); }, 620);
+
+    var flash = document.createElement("span");
+    flash.className = "match-flash";
+    flash.style.background = c[0];
+    flash.style.width = flash.style.height = traySize + "px";
+    flash.style.setProperty("--sx", at.x + "px");
+    flash.style.setProperty("--sy", at.y + "px");
+    playfield.appendChild(flash);
+    setTimeout(function () { flash.remove(); }, 420);
   }
 
   function popScore(at, pts) {
@@ -413,7 +529,7 @@
 
   /* ── Power-ups ───────────────────────────────────────────────────── */
   function doUndo() {
-    if (status !== "playing" || !powers.undo || !history.length) return;
+    if (status !== "playing" || !powers.undo || !history.length || pending) return;
     clearHints();
     var rec = history.pop();
 
@@ -507,7 +623,8 @@
     hudLeft.textContent = String(tiles.filter(function (t) { return t.place !== "gone"; }).length);
     ["undo", "shuffle", "hint"].forEach(function (k) {
       powCount[k].textContent = String(powers[k]);
-      powBtn[k].disabled = !powers[k] || status !== "playing" || (k === "undo" && !history.length);
+      powBtn[k].disabled =
+        !powers[k] || status !== "playing" || pending > 0 || (k === "undo" && !history.length);
     });
     trayEl.classList.toggle("danger", tray.length >= CAPACITY - 2 && status === "playing");
   }
@@ -635,6 +752,7 @@
         tray: tray.slice(),
         level: levelIndex,
         remaining: tiles.filter(function (t) { return t.place !== "gone"; }).length,
+        pending: pending,
         free: tiles.filter(function (t) { return t.place === "board" && isFree(t); }).map(function (t) { return t.id; }),
         types: tiles.map(function (t) { return t.type; }),
         board: tiles.map(function (t) {
@@ -646,7 +764,14 @@
     start: function (i) { hideSheet(); buildLevel(i || 0); },
     undo: doUndo,
     shuffle: doShuffle,
-    hint: doHint
+    hint: doHint,
+    // Resolve every in-flight placement at once. Only for tests that care
+    // about board logic rather than animation timing.
+    settle: function () {
+      history.forEach(function (r) {
+        if (r.timer) { clearTimeout(r.timer); r.timer = null; land(r); }
+      });
+    }
   };
 
   showSheet("intro");

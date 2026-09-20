@@ -62,8 +62,15 @@ is guaranteed clearable — a player who finds that order never needs more than
 three of the seven tray slots. Types still land scattered across layers, so
 finding it remains a real puzzle.
 
+A tap plays out in beats: the candy flies to its tray slot (340ms) before the
+match is allowed to resolve, the three matched candies then swell in place,
+slide into the middle one and burst; candies uncovered by the tap light up a
+beat later, once the candy that was covering them has moved off.
+
 `window.Sugarsnap` exposes `state()`, `pick(id)`, `start(level)`, `undo()`,
-`shuffle()` and `hint()` for driving the game from a test harness.
+`shuffle()`, `hint()` and `settle()` for driving the game from a test harness.
+`settle()` resolves every in-flight placement at once, for tests that care
+about board logic rather than animation timing.
 
 ## Deployment
 
