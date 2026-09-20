@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches:
+      - master
+  # Lets you publish on demand from the Actions tab without pushing.
+  workflow_dispatch:
+
+# Permissions the deploy-pages action needs to publish on our behalf.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let an in-flight deploy finish rather than
+# cancelling it half-published.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on for the repo the first time this runs.
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # The static site lives here. Point this at the build output
+          # (e.g. ./dist) if a bundler is added later.
+          path: ./site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
