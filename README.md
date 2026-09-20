@@ -6,29 +6,31 @@ A little arcade of self-contained web apps, published to GitHub Pages.
 
 ## Layout
 
+The site is served straight from the repository root, so the site files *are*
+the repo:
+
 ```
-site/                          # everything that gets published
-  index.html                   # the hub: renders a card per app
-  assets/
-    site.css                   # shared design tokens (candy palette, buttons, backdrop)
-    hub.css  hub.js            # hub-only styles + card rendering
-    apps.js                    # THE APP REGISTRY
-    fonts/fredoka-latin.woff2  # self-hosted; no third-party requests
-    favicon.svg
-  apps/
-    sugarsnap/                 # one folder per app
-      index.html  sugarsnap.css  sugarsnap.js
-.github/workflows/deploy-pages.yml
+index.html                   # the hub: renders a card per app
+.nojekyll                    # serve files as-is; do not run Jekyll
+assets/
+  site.css                   # shared design tokens (candy palette, buttons, backdrop)
+  hub.css  hub.js            # hub-only styles + card rendering
+  apps.js                    # THE APP REGISTRY
+  fonts/fredoka-latin.woff2  # self-hosted; no third-party requests
+  favicon.svg
+apps/
+  sugarsnap/                 # one folder per app
+    index.html  sugarsnap.css  sugarsnap.js
 ```
 
-No build step, no dependencies, no external requests — the whole site is static
-files that work straight from disk.
+No build step, no dependencies, no external requests — plain static files that
+also work opened straight from disk.
 
 ## Adding an app
 
-1. Create `site/apps/<slug>/` with its own `index.html`.
+1. Create `apps/<slug>/` with its own `index.html`.
 2. Link `../../assets/site.css` to inherit the shared look, and `../../` to get home.
-3. Add one entry to `window.TUTU_APPS` in `site/assets/apps.js`:
+3. Add one entry to `window.TUTU_APPS` in `assets/apps.js`:
 
 ```js
 {
@@ -43,8 +45,8 @@ files that work straight from disk.
 }
 ```
 
-The hub picks it up automatically. The deploy workflow publishes all of `site/`,
-so there is nothing to wire up there either.
+The hub picks it up automatically. Everything in the repo is published, so
+there is nothing else to wire up.
 
 ## Apps
 
@@ -65,22 +67,23 @@ finding it remains a real puzzle.
 
 ## Deployment
 
-Every push to `master` runs
-[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml),
-which uploads `site/` and publishes it. It can also be run by hand from the
-**Actions** tab.
+GitHub Pages is configured under **Settings → Pages** as
+**Source: Deploy from a branch**, branch `master`, folder **/ (root)**.
 
-Two one-time repository settings this needs, neither of which a workflow can set
-for itself:
+Pushing to `master` is the whole deploy. GitHub runs its own *pages build and
+deployment* job; there is no workflow in this repo and nothing to maintain.
 
-- **Settings → Pages → Source: GitHub Actions.** `GITHUB_TOKEN` may deploy to
-  Pages but may not enable it.
-- **Settings → Environments → `github-pages` → Deployment branches** must admit
-  `master`. GitHub pins this rule to whatever the default branch was when Pages
-  was switched on; changing the default branch later does not update it.
+Two things this setup depends on:
+
+- **`.nojekyll` must stay at the repo root.** Branch-based Pages runs the files
+  through Jekyll by default, which skips paths beginning with `_` and can
+  rewrite others. This file turns that off and serves the tree verbatim.
+- **Paths stay relative.** The site is served from `/tutu/`, not a domain root,
+  so absolute paths like `/assets/…` would break. Use `assets/…` from the hub
+  and `../../assets/…` from an app.
 
 ## Local preview
 
 ```sh
-python3 -m http.server -d site 8000   # http://localhost:8000
+python3 -m http.server 8000   # from the repo root; http://localhost:8000
 ```

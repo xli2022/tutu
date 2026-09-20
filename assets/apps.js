@@ -1,5 +1,5 @@
 /* The app registry. Adding an app to tutu = drop a folder under
-   site/apps/<slug>/ and add one entry here. Nothing else to wire up. */
+   apps/<slug>/ and add one entry here. Nothing else to wire up. */
 window.TUTU_APPS = [
   {
     slug: "sugarsnap",

@@ -47,7 +47,7 @@
       '<span class="soon-plus" aria-hidden="true">+</span>' +
       "<h3>More on the way</h3>" +
       "<p>tutu is built to hold a whole shelf of small web apps. " +
-      "Next one drops in <code>site/apps/</code>.</p>" +
+      "Next one drops in <code>apps/</code>.</p>" +
       "</div>";
     return el;
   }
