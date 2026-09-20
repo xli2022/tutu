@@ -22,9 +22,12 @@ which uploads `site/` and publishes it to GitHub Pages. The workflow can also
 be started by hand from the repository's **Actions** tab (*Deploy to GitHub
 Pages* → *Run workflow*).
 
-One-time setup: in **Settings → Pages**, set **Source** to **GitHub Actions**.
-The workflow passes `enablement: true`, so the first run will usually flip this
-for you — set it manually if that run reports Pages is not enabled.
+**One-time setup (required):** in
+[**Settings → Pages**](https://github.com/xli2022/tutu/settings/pages), set
+**Source** to **GitHub Actions**. A workflow cannot do this for you — its
+`GITHUB_TOKEN` may deploy to Pages but is not allowed to enable Pages, so until
+the setting is flipped every run fails at *Configure Pages* with
+`Get Pages site failed. Error: Not Found`.
 
 The published URL is `https://xli2022.github.io/tutu/` and is also printed in
 the workflow run summary.
