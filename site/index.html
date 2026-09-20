@@ -3,34 +3,49 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>tutu</title>
-    <meta name="description" content="Placeholder site for the tutu project, deployed automatically to GitHub Pages." />
-    <meta name="color-scheme" content="light dark" />
+    <title>tutu — a little arcade of web apps</title>
+    <meta name="description" content="tutu is a small collection of self-contained web apps. Start with Sugarsnap, a triple-match candy puzzle." />
+    <meta name="theme-color" content="#2b1b5e" />
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="assets/styles.css" />
+    <link rel="stylesheet" href="assets/site.css" />
+    <link rel="stylesheet" href="assets/hub.css" />
   </head>
   <body>
-    <main class="card">
-      <span class="badge">Placeholder</span>
-      <h1>tutu</h1>
-      <p class="lede">
-        This site is a placeholder. Replace the files in
-        <code>site/</code> with the real app whenever you're ready.
-      </p>
+    <div class="backdrop"></div>
 
-      <ul class="steps">
-        <li>Edit <code>site/index.html</code>, <code>site/assets/styles.css</code>, and <code>site/assets/app.js</code>.</li>
-        <li>Push to <code>master</code> &mdash; GitHub Actions builds and publishes automatically.</li>
-        <li>Swapping in a bundler later? Point the workflow's upload path at the build output.</li>
-      </ul>
+    <!-- Gradient used by the hub card icons. -->
+    <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+      <defs>
+        <linearGradient id="hubGloss" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#fff" />
+          <stop offset="55%" stop-color="#ffe3f1" />
+          <stop offset="100%" stop-color="#ffb3da" />
+        </linearGradient>
+      </defs>
+    </svg>
 
-      <footer class="meta">
-        <span>Deployed via GitHub Pages</span>
-        <span aria-hidden="true">&middot;</span>
-        <span>Loaded <time id="loaded-at">&mdash;</time></span>
+    <main class="page">
+      <header class="masthead">
+        <h1 class="logo wordmark">tutu</h1>
+        <p class="tagline">
+          A little arcade of self-contained web apps. No installs, no accounts —
+          just open one and play.
+        </p>
+        <p><span class="shelf-label"><span id="app-count">1 app</span><span>on the shelf</span></span></p>
+      </header>
+
+      <h2 class="sr-only">Apps</h2>
+      <div class="app-grid" id="app-grid"></div>
+
+      <footer class="site-foot">
+        <p>
+          Built as a static site and deployed straight to GitHub Pages —
+          <a href="https://github.com/xli2022/tutu">source on GitHub</a>.
+        </p>
       </footer>
     </main>
 
-    <script src="assets/app.js"></script>
+    <script src="assets/apps.js"></script>
+    <script src="assets/hub.js"></script>
   </body>
 </html>

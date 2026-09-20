@@ -1,0 +1,149 @@
+/* Fredoka (variable, latin subset) — self-hosted so the site stays
+   self-contained: no third-party request, and it works offline.
+   URL is relative to this stylesheet, so it resolves from any app page. */
+@font-face {
+  font-family: "Fredoka";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("fonts/fredoka-latin.woff2") format("woff2");
+}
+
+/* ── tutu shared design system ─────────────────────────────────────────
+   Candy-arcade tokens used by the hub and by every app.                */
+
+:root {
+  /* Candy palette — each hue has a light (top) and deep (bottom) stop
+     so pieces can be built as glossy gradients. */
+  --c-red-1:#ff8a9b;   --c-red-2:#e8243f;
+  --c-orange-1:#ffbe6b; --c-orange-2:#f2701a;
+  --c-yellow-1:#ffe680; --c-yellow-2:#f5b813;
+  --c-green-1:#9ff08a;  --c-green-2:#34a43a;
+  --c-blue-1:#8fd4ff;   --c-blue-2:#1878d4;
+  --c-purple-1:#c9a6ff; --c-purple-2:#7433d1;
+  --c-pink-1:#ffa8d8;   --c-pink-2:#e0328f;
+  --c-teal-1:#8ff0e2;   --c-teal-2:#12a596;
+
+  /* Surfaces */
+  --bg-1:#2b1b5e;
+  --bg-2:#4a239a;
+  --bg-3:#1b2f78;
+  --panel:rgba(255,255,255,.13);
+  --panel-solid:#3a2478;
+  --panel-border:rgba(255,255,255,.28);
+
+  --text:#fff7fb;
+  --text-dim:#d6c7f2;
+  --ink:#3d1b63;
+
+  --shadow-lift:0 10px 0 rgba(0,0,0,.22), 0 16px 34px rgba(0,0,0,.34);
+  --shadow-soft:0 8px 28px rgba(0,0,0,.28);
+
+  --r-sm:12px; --r-md:20px; --r-lg:30px;
+
+  --font: "Fredoka", ui-rounded, "Baloo 2", "Segoe UI Variable",
+          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-weight: 500;
+  color: var(--text);
+  background: var(--bg-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Sweet-shop backdrop: deep gradient plus a few soft colour blooms. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 600px at 12% 8%,  rgba(224,50,143,.42), transparent 62%),
+    radial-gradient(760px 560px at 88% 16%, rgba(24,120,212,.46), transparent 60%),
+    radial-gradient(820px 620px at 50% 108%, rgba(245,184,19,.26), transparent 62%),
+    linear-gradient(168deg, var(--bg-2) 0%, var(--bg-1) 48%, var(--bg-3) 100%);
+}
+
+/* ── Shared chunky button ─────────────────────────────────────────── */
+.btn {
+  --btn-1:var(--c-green-1);
+  --btn-2:var(--c-green-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  padding: .72rem 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: .01em;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--btn-1), var(--btn-2));
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.65),
+    inset 0 -3px 0 rgba(0,0,0,.18),
+    0 5px 0 rgba(0,0,0,.26),
+    0 9px 18px rgba(0,0,0,.3);
+  text-shadow: 0 2px 0 rgba(0,0,0,.22);
+  transition: transform .12s ease, box-shadow .12s ease, filter .12s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn:active {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 2px 0 rgba(255,255,255,.5),
+    inset 0 -2px 0 rgba(0,0,0,.2),
+    0 1px 0 rgba(0,0,0,.26),
+    0 3px 8px rgba(0,0,0,.3);
+}
+.btn:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+.btn[disabled] { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+.btn[disabled]:active { transform: none; }
+
+.btn-blue   { --btn-1:var(--c-blue-1);   --btn-2:var(--c-blue-2); }
+.btn-pink   { --btn-1:var(--c-pink-1);   --btn-2:var(--c-pink-2); }
+.btn-yellow { --btn-1:var(--c-yellow-1); --btn-2:var(--c-yellow-2); color:#6b3d00; text-shadow:0 1px 0 rgba(255,255,255,.5); }
+.btn-ghost {
+  background: rgba(255,255,255,.14);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,.3);
+  text-shadow: none;
+}
+.btn-ghost:active { transform: translateY(2px); box-shadow: inset 0 0 0 2px rgba(255,255,255,.3); }
+
+/* Wordmark shared by hub + apps */
+.wordmark {
+  font-weight: 700;
+  letter-spacing: -.02em;
+  background: linear-gradient(180deg, #fff 0%, #ffd9ec 48%, #ff9ed2 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(0,0,0,.28));
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
