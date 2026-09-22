@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  var CAPACITY = 7;
+  var CAPACITY = 7;        // default tray size; a level may ask for fewer
   var FLY_MS = 340;        // keep in sync with .tile transition-duration
   var REVEAL_MS = 520;     // keep in sync with the reveal animations
   var MERGE_HIT_MS = 330;  // when the three meet and swell inside `merge`
@@ -19,17 +19,47 @@
     ["#ff8a9b", "#e8243f"], ["#ffbe6b", "#f2701a"],
     ["#ffe680", "#f5b813"], ["#9ff08a", "#34a43a"],
     ["#8fd4ff", "#1878d4"], ["#c9a6ff", "#7433d1"],
-    ["#ffa8d8", "#e0328f"], ["#8ff0e2", "#12a596"]
+    ["#ffa8d8", "#e0328f"], ["#8ff0e2", "#12a596"],
+    ["#c08557", "#5a2f16"], ["#ffffff", "#d0122c"]
   ];
   var SLOT_GAP = 6.4;      // keep in sync with .tray-slots gap
   var TRAY_CHROME = 30;    // tray padding + margin, in px
 
+  /* Ten levels, tuned by simulation rather than by eye. The percentage on
+     each row is how often a competent solver that never touches a power-up
+     clears it, over hundreds of runs, so the ramp is measured rather than
+     guessed.
+
+     1-5 are pyramids: layers shrink on both axes, so every layer keeps an
+     exposed fringe and there is always plenty of choice. From 6 on the rows
+     stay constant, which stacks each column in line -- reaching the bottom of
+     a column means peeling every layer above it in order, and that is what
+     actually makes them hard. A pyramid stays around 95% however big it gets.
+     Depth stops at six layers: at seven the free tiles shrink to a narrow
+     stripe and the board stops reading as a pile.
+
+     The last two levels take a tray slot away instead of stacking deeper,
+     which is a far stronger squeeze than more tiles and keeps the board
+     legible. */
   var LEVELS = [
-    { name: "Sweet Start",   types: 4, layers: [{ c: 5, r: 3 }, { c: 4, r: 2 }] },
-    { name: "Jelly Garden",  types: 5, layers: [{ c: 6, r: 4 }, { c: 5, r: 3 }, { c: 4, r: 2 }] },
-    { name: "Gummy Grove",   types: 6, layers: [{ c: 6, r: 5 }, { c: 5, r: 4 }, { c: 4, r: 3 }] },
-    { name: "Lollipop Lane", types: 7, layers: [{ c: 7, r: 5 }, { c: 6, r: 4 }, { c: 5, r: 3 }, { c: 4, r: 2 }] },
-    { name: "Candy Castle",  types: 8, layers: [{ c: 7, r: 5 }, { c: 6, r: 4 }, { c: 5, r: 3 }, { c: 4, r: 2 }, { c: 3, r: 1 }] }
+    { name: "Sweet Start",         types:  4, layers: [{ c: 5, r: 3 }, { c: 4, r: 2 }] },                                        //  21, 100%
+    { name: "Jelly Garden",        types:  5, layers: [{ c: 5, r: 4 }, { c: 4, r: 3 }] },                                        //  30, 100%
+    { name: "Gummy Grove",         types:  6, layers: [{ c: 6, r: 4 }, { c: 5, r: 3 }, { c: 4, r: 2 }] },                        //  45, 100%
+    { name: "Lollipop Lane",       types:  7, layers: [{ c: 6, r: 5 }, { c: 5, r: 4 }, { c: 4, r: 3 }] },                        //  60,  99%
+    { name: "Caramel Court",       types:  8, layers: [{ c: 7, r: 5 }, { c: 6, r: 4 }, { c: 5, r: 3 }, { c: 4, r: 2 }],          //  81,  99%
+      powers: { hint: 2 } },
+    { name: "Marshmallow Mile",    types:  9, layers: [{ c: 7, r: 4 }, { c: 6, r: 4 }, { c: 5, r: 4 }, { c: 4, r: 4 }],          //  87,  85%
+      powers: { hint: 2 } },
+    { name: "Toffee Tower",        types: 10, layers: [{ c: 8, r: 4 }, { c: 7, r: 4 }, { c: 6, r: 4 }, { c: 5, r: 4 }],          // 102,  78%
+      powers: { hint: 2 } },
+    { name: "Liquorice Labyrinth", types: 10, layers: [{ c: 8, r: 4 }, { c: 7, r: 4 }, { c: 6, r: 4 }, { c: 5, r: 4 }, { c: 4, r: 4 }],  // 120, 64%
+      powers: { undo: 2, shuffle: 1, hint: 2 } },
+    { name: "Peppermint Peak",     types: 10, capacity: 6,                                                                        // 150,  39%
+      layers: [{ c: 8, r: 5 }, { c: 7, r: 5 }, { c: 6, r: 5 }, { c: 5, r: 5 }, { c: 4, r: 5 }],
+      powers: { undo: 2, shuffle: 1, hint: 2 } },
+    { name: "Candy Castle",        types: 10, capacity: 6,                                                                        // 165,  30%
+      layers: [{ c: 8, r: 5 }, { c: 7, r: 5 }, { c: 6, r: 5 }, { c: 5, r: 5 }, { c: 4, r: 5 }, { c: 3, r: 5 }],
+      powers: { undo: 2, shuffle: 1, hint: 1 } }
   ];
 
   var POWER_START = { undo: 3, shuffle: 2, hint: 3 };
@@ -47,6 +77,7 @@
   var sheetScoreV  = document.getElementById("sheet-score-value");
   var sheetActions = document.getElementById("sheet-actions");
   var live = document.getElementById("live");
+  var toastEl = document.getElementById("toast");
 
   var hudLevel = document.getElementById("hud-level");
   var hudName  = document.getElementById("hud-level-name");
@@ -65,11 +96,16 @@
   };
 
   var slots = [];
-  for (var s = 0; s < CAPACITY; s++) {
-    var slot = document.createElement("div");
-    slot.className = "tray-slot";
-    slotsWrap.appendChild(slot);
-    slots.push(slot);
+
+  function buildSlots(n) {
+    slotsWrap.innerHTML = "";
+    slots = [];
+    for (var i = 0; i < n; i++) {
+      var slot = document.createElement("div");
+      slot.className = "tray-slot";
+      slotsWrap.appendChild(slot);
+      slots.push(slot);
+    }
   }
 
   /* ── State ───────────────────────────────────────────────────────── */
@@ -85,6 +121,7 @@
   var size = 56, traySize = 56, boardOx = 0, boardOy = 0;
   var slotPos = [];
   var hintTimer = null;
+  var capacity = CAPACITY;
   var pending = 0;         // placements still flying toward the tray
   var levelToken = 0;      // bumped per level, so stale effects self-cancel
 
@@ -111,6 +148,20 @@
   }
 
   function say(msg) { if (live) live.textContent = msg; }
+
+  var toastTimer = null;
+  // say() alone only reaches a screen reader; a sighted player needs to see
+  // that the button did something.
+  function toast(msg) {
+    say(msg);
+    if (!toastEl) return;
+    clearTimeout(toastTimer);
+    toastEl.hidden = true;
+    void toastEl.offsetWidth;
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    toastTimer = setTimeout(function () { toastEl.hidden = true; }, 2200);
+  }
 
   /* ── Board generation ────────────────────────────────────────────── */
   function buildPositions(level) {
@@ -192,7 +243,7 @@
     var level = LEVELS[index];
     var pos = buildPositions(level);
 
-    var palette = shuffle([0, 1, 2, 3, 4, 5, 6, 7]).slice(0, level.types);
+    var palette = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]).slice(0, level.types);
     var bag = assignTypes(pos, palette);
 
     playfield
@@ -214,10 +265,12 @@
     });
     extent = { minX: minX, minY: minY, w: maxX - minX, h: maxY - minY };
 
+    capacity = level.capacity || CAPACITY;
+    buildSlots(capacity);
     tray = [];
     history = [];
     combo = 0;
-    powers = Object.assign({}, POWER_START);
+    powers = Object.assign({}, POWER_START, level.powers || {});
     levelIndex = index;
     status = "playing";
 
@@ -259,7 +312,7 @@
 
     // Seven tray slots have to fit the width; the board does not, so the two
     // sizes are solved separately and a tray-bound tile simply scales down.
-    var byTray   = Math.min(84, (pf.width - (CAPACITY - 1) * SLOT_GAP) / CAPACITY);
+    var byTray   = Math.min(84, (pf.width - (capacity - 1) * SLOT_GAP) / capacity);
     var byHeight = (pf.height - TRAY_CHROME - byTray) / extent.h;
     var byWidth  = pf.width / extent.w;
     size = Math.max(26, Math.min(84, byHeight, byWidth));
@@ -349,8 +402,8 @@
   /* ── Playing a tile ──────────────────────────────────────────────── */
   function pick(t) {
     if (status !== "playing" || t.place !== "board" || !isFree(t)) return;
-    // Seven slots is seven slots, even while a match is still landing.
-    if (tray.length >= CAPACITY) return;
+    // A full tray is full, even while a match is still landing.
+    if (tray.length >= capacity) return;
     clearHints();
 
     t.place = "tray";
@@ -394,7 +447,7 @@
   function checkEnd() {
     if (pending > 0 || status !== "playing") return;
     if (tiles.every(function (x) { return x.place === "gone"; })) finish("won");
-    else if (tray.length >= CAPACITY) finish("lost");
+    else if (tray.length >= capacity) finish("lost");
   }
 
   function resolve(record) {
@@ -581,7 +634,7 @@
     });
     powers.shuffle--;
     updateHud();
-    say("Board reshuffled.");
+    toast("Board reshuffled.");
   }
 
   function doHint() {
@@ -604,7 +657,7 @@
       var need = Math.max(1, 3 - (trayCount[ty] || 0));
       if (groups[ty].length >= need) { pick3 = groups[ty].slice(0, need); break; }
     }
-    if (!pick3) { say("No triple available — try a shuffle."); return; }
+    if (!pick3) { toast("No triple to point at yet — try a shuffle."); return; }
 
     pick3.forEach(function (t) { t.el.classList.add("hinted"); });
     hintTimer = setTimeout(clearHints, 2400);
@@ -626,7 +679,7 @@
       powBtn[k].disabled =
         !powers[k] || status !== "playing" || pending > 0 || (k === "undo" && !history.length);
     });
-    trayEl.classList.toggle("danger", tray.length >= CAPACITY - 2 && status === "playing");
+    trayEl.classList.toggle("danger", tray.length >= capacity - 2 && status === "playing");
   }
 
   /* ── Overlay sheet ───────────────────────────────────────────────── */
@@ -658,7 +711,7 @@
         '<ul class="sheet-rules">' +
         '<li><span class="num">1</span><span>Tap any candy that is not covered — it flies into your tray.</span></li>' +
         '<li><span class="num">2</span><span>Three of a kind in the tray pop for points.</span></li>' +
-        '<li><span class="num">3</span><span>All seven slots full and you are out. Clear the pile to win.</span></li>' +
+        '<li><span class="num">3</span><span>Fill every tray slot and you are out. Clear the pile to win.</span></li>' +
         "</ul>";
       var start = data.unlocked ? data.unlocked : 0;
       sheetActions.appendChild(button(start ? "Continue — Level " + (start + 1) : "Play", "", function () {
@@ -672,9 +725,15 @@
     } else if (kind === "won") {
       var last = levelIndex >= LEVELS.length - 1;
       sheetTitle.textContent = last ? "Sweet victory!" : "Level cleared!";
+      var next = last ? null : LEVELS[levelIndex + 1];
+      // Flag a shrinking tray here rather than letting the player discover it
+      // the hard way on their first tap.
+      var squeeze = next && (next.capacity || CAPACITY) < capacity
+        ? " The tray drops to <strong>" + (next.capacity || CAPACITY) + " slots</strong>."
+        : "";
       sheetText.innerHTML = last
         ? "You cleared every level in the candy jar. <strong>Nicely done.</strong>"
-        : "Pile cleared. <strong>" + LEVELS[levelIndex + 1].name + "</strong> is unlocked.";
+        : "Pile cleared. <strong>" + next.name + "</strong> is unlocked." + squeeze;
       sheetScore.hidden = false;
       sheetScoreV.textContent = String(score);
       if (!last) {
@@ -753,6 +812,7 @@
         level: levelIndex,
         remaining: tiles.filter(function (t) { return t.place !== "gone"; }).length,
         pending: pending,
+        capacity: capacity,
         free: tiles.filter(function (t) { return t.place === "board" && isFree(t); }).map(function (t) { return t.id; }),
         types: tiles.map(function (t) { return t.type; }),
         board: tiles.map(function (t) {

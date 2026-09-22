@@ -26,6 +26,8 @@
         <linearGradient id="g5" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c9a6ff"/><stop offset="100%" stop-color="#7433d1"/></linearGradient>
         <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffa8d8"/><stop offset="100%" stop-color="#e0328f"/></linearGradient>
         <linearGradient id="g7" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8ff0e2"/><stop offset="100%" stop-color="#12a596"/></linearGradient>
+        <linearGradient id="g8" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#c08557"/><stop offset="100%" stop-color="#5a2f16"/></linearGradient>
+        <linearGradient id="g9" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff6d7f"/><stop offset="100%" stop-color="#d0122c"/></linearGradient>
 
         <!-- 0 · jelly bean -->
         <symbol id="candy-0" viewBox="0 0 100 100">
@@ -88,6 +90,30 @@
           <path d="M50 16 L61 40 L86 43 L67 60 L73 85 L50 72 L27 85 L33 60 L14 43 L39 40 Z" fill="url(#g7)"/>
           <ellipse cx="42" cy="38" rx="8" ry="5" fill="#fff" opacity=".62" transform="rotate(-30 42 38)"/>
         </symbol>
+
+        <!-- 8 · chocolate bar -->
+        <symbol id="candy-8" viewBox="0 0 100 100">
+          <rect x="14" y="27" width="72" height="46" rx="9" fill="url(#g8)"/>
+          <g stroke="#3d1c08" stroke-opacity=".45" stroke-width="3" stroke-linecap="round">
+            <path d="M50 29 V71"/>
+            <path d="M16 50 H84"/>
+          </g>
+          <rect x="19" y="32" width="26" height="14" rx="4" fill="#fff" opacity=".2"/>
+          <ellipse cx="31" cy="37" rx="8" ry="4.5" fill="#fff" opacity=".42" transform="rotate(-16 31 37)"/>
+        </symbol>
+
+        <!-- 9 · peppermint pinwheel -->
+        <symbol id="candy-9" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="31" fill="#fffafa"/>
+          <g fill="url(#g9)">
+            <path d="M50 50 L81 50 A31 31 0 0 1 71.9 71.9 Z"/>
+            <path d="M50 50 L50 81 A31 31 0 0 1 28.1 71.9 Z"/>
+            <path d="M50 50 L19 50 A31 31 0 0 1 28.1 28.1 Z"/>
+            <path d="M50 50 L50 19 A31 31 0 0 1 71.9 28.1 Z"/>
+          </g>
+          <circle cx="50" cy="50" r="31" fill="none" stroke="url(#g9)" stroke-width="4"/>
+          <ellipse cx="39" cy="36" rx="9" ry="5.5" fill="#fff" opacity=".72" transform="rotate(-30 39 36)"/>
+        </symbol>
       </defs>
     </svg>
 
@@ -139,6 +165,7 @@
       </nav>
 
       <p class="live-region sr-only" id="live" role="status" aria-live="polite"></p>
+      <div class="toast" id="toast" hidden></div>
     </div>
 
     <div class="overlay" id="overlay" hidden>
