@@ -10,6 +10,18 @@
       '<circle cx="50" cy="50" r="26" fill="#fff"/>' +
       '<circle cx="50" cy="50" r="26" fill="url(#hubGloss)"/>' +
       "</svg>",
+    // Layered hills of a stacked area chart: a spending landscape.
+    scape:
+      '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+      '<defs><clipPath id="hubScapeClip"><rect x="8" y="16" width="84" height="70" rx="16"/></clipPath></defs>' +
+      '<rect x="8" y="16" width="84" height="70" rx="16" fill="rgba(255,255,255,.22)"/>' +
+      '<g clip-path="url(#hubScapeClip)">' +
+      '<circle cx="30" cy="37" r="8" fill="#fff"/>' +
+      '<path d="M8 66 C22 50 34 58 48 46 S74 32 92 40 V90 H8 Z" fill="rgba(255,255,255,.5)"/>' +
+      '<path d="M8 74 C24 62 38 68 52 60 S78 54 92 58 V90 H8 Z" fill="rgba(255,255,255,.75)"/>' +
+      '<path d="M8 82 C24 76 40 80 56 75 S80 72 92 74 V90 H8 Z" fill="#fff"/>' +
+      '<path d="M8 82 C24 76 40 80 56 75 S80 72 92 74 V90 H8 Z" fill="url(#hubGloss)"/>' +
+      "</g></svg>",
   };
 
   function card(app) {
@@ -19,6 +31,7 @@
     el.style.setProperty("--a2", app.accent[1]);
 
     var href = "apps/" + app.slug + "/";
+    var cta = app.cta || "Play";   // games play; tools open
     var tags = app.tags
       .map(function (t) {
         return '<li class="tag">' + t + "</li>";
@@ -26,7 +39,7 @@
       .join("");
 
     el.innerHTML =
-      '<a class="app-thumb" href="' + href + '" aria-label="Play ' + app.name + '">' +
+      '<a class="app-thumb" href="' + href + '" aria-label="' + cta + " " + app.name + '">' +
       '<span class="app-thumb-icon">' + (ICONS[app.icon] || "") + "</span>" +
       "</a>" +
       '<div class="app-body">' +
@@ -34,7 +47,7 @@
       '<p class="app-tagline">' + app.tagline + "</p>" +
       '<p class="app-blurb">' + app.blurb + "</p>" +
       '<ul class="tags">' + tags + "</ul>" +
-      '<a class="btn btn-pink app-play" href="' + href + '">Play</a>' +
+      '<a class="btn btn-pink app-play" href="' + href + '">' + cta + "</a>" +
       "</div>";
     return el;
   }

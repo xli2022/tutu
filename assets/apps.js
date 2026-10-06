@@ -13,4 +13,17 @@ window.TUTU_APPS = [
     icon: "candy",
     status: "live",
   },
+  {
+    slug: "spendscape",
+    name: "Spendscape",
+    tagline: "See where your money goes",
+    blurb:
+      "Drop in your bank statements (CSV, OFX, QFX or QIF) and watch your " +
+      "spending sort itself into categories over time. Nothing leaves your browser.",
+    tags: ["Finance", "Charts"],
+    accent: ["#8ff0e2", "#1878d4"],
+    icon: "scape",
+    cta: "Open",
+    status: "live",
+  },
 ];

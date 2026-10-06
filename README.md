@@ -21,6 +21,10 @@ assets/
 apps/
   sugarsnap/                 # one folder per app
     index.html  sugarsnap.css  sugarsnap.js
+  spendscape/
+    index.html  spendscape.css  spendscape.js   # page, styles, state + wiring
+    formats.js  categories.js  analysis.js      # parsing, categorising, numbers
+    charts.js   sample.js                       # SVG charts, demo statements
 ```
 
 No build step, no dependencies, no external requests — plain static files that
@@ -40,7 +44,8 @@ also work opened straight from disk.
   blurb: "A sentence or two for the card.",
   tags: ["Puzzle"],
   accent: ["#8fd4ff", "#1878d4"],   // card thumbnail gradient
-  icon: "candy",
+  icon: "candy",               // a key of ICONS in assets/hub.js
+  cta: "Open",                 // optional button label; defaults to "Play"
   status: "live",
 }
 ```
@@ -104,6 +109,99 @@ Three levers, in order of strength:
 `shuffle()`, `hint()` and `settle()` for driving the game from a test harness.
 `settle()` resolves every in-flight placement at once, for tests that care
 about board logic rather than animation timing.
+
+### Spendscape
+
+A bank statement explorer. Drop in the files your bank lets you download and it
+sorts every transaction into a category and charts your spending over time:
+stacked bars, a flowing stacked area or trend lines by category; money in
+against money out; a day-by-day calendar; where the income went; top
+merchants; bills and subscriptions it spotted; plain-language insights; and a
+searchable transaction list where any transaction can be re-filed.
+"Try it with sample data" loads fifteen months of made-up statements for two
+accounts.
+
+**Nothing leaves the browser.** Files are read with `FileReader` and parsed in
+the page; there are no network requests. `localStorage` keeps only the user's
+category changes, any column layouts they fixed, and display preferences. The
+statements themselves are kept only if the user ticks *Remember my statements
+on this device*, and *Clear everything* wipes it all.
+
+#### Reading statements
+
+`formats.js` turns a file into `{ date, amount, desc, memo, bankCat, account }`,
+with `amount` signed from the account holder's side (negative is money out).
+
+- **CSV / TSV**, any delimiter, any column order, with or without a header row,
+  with or without a preamble above it. Columns are matched by name (English
+  and the common European bank headings) and then checked against what they
+  actually hold; anything still missing is found from the values alone.
+- **Dates**: year-first, day-first, month-first, month names, compact `20250304`,
+  Quicken's `3/4'25`. Day-first vs month-first is settled by any value above 12,
+  then by which reading keeps the rows in date order, then by hints such as
+  decimal commas or a pound/euro currency.
+- **Amounts**: currency signs and codes, `1.234,56`, `(12.50)`, `12.50-`, `CR`/`DR`.
+- **Signs**: separate debit/credit columns; a type column for unsigned amounts;
+  otherwise the descriptions ("PAYMENT THANK YOU" is money in), the running
+  balance and the plain majority vote on whether purchases are negative or
+  positive (credit card exports often make them positive).
+- **OFX / QFX** (SGML and XML) and **QIF**.
+- Text is decoded as UTF-8, UTF-16 when a byte-order mark says so, and
+  Windows-1252 otherwise.
+
+When a spreadsheet leaves real doubt (an unsettled date order, guessed signs,
+a missing column) the user gets a short review dialog with a live preview and a
+count of money in and out. A layout fixed there is remembered by its header
+row, so that bank's next export goes straight in. PDFs are refused with a
+pointer to the CSV/OFX/QIF downloads: they are laid out for printing, and
+reading them would mean shipping a PDF engine.
+
+Re-importing overlapping statements adds only what is new: a transaction's id
+is its date, amount and description plus how many times that trio already
+appeared in its file, so two identical coffees on one day both survive.
+
+#### Categories
+
+`categories.js` holds 21 categories, each an expense, income or transfer.
+Transfers (between your own accounts, card payments, Venmo/Zelle and the like)
+count as neither spending nor income, and refunds net down the category they
+came from. First match wins:
+
+1. a transaction the user re-filed by hand,
+2. a rule the user made for its merchant ("file every Blue Bottle under Dining"),
+3. a known merchant or unmistakable phrase (a few hundred of them),
+4. the bank's own category column, when the export has one,
+5. generic words ("restaurant", "pharmacy"),
+6. otherwise money in is Income and money out is Uncategorized.
+
+Merchant names are cleaned for display and grouping: card-processor prefixes,
+store numbers, references, dates and padded locations are stripped, so
+`POS PURCHASE SQ *BLUE BOTTLE COFFEE 0432  OAKLAND CA` becomes *Blue Bottle
+Coffee*.
+
+#### Charts
+
+`charts.js` is a small hand-written SVG library: no dependencies, animated with
+`requestAnimationFrame`, and still when the user prefers reduced motion. Every
+chart has a hover/focus tooltip that lists every series with the value first;
+the period charts and the calendar can be read with the arrow keys; the two
+period charts have a table view, and the category breakdown is itself a table.
+
+The eight category colours are a validated categorical palette, checked with an
+OKLab colour-vision simulation and for contrast against the dark card surface
+(`#1b1240`) the charts sit on. The top eight categories by all-time spend hold
+them; the rest fold into a grey *Everything else*. Colours follow the category,
+not its rank in the current view, and keep their slot when the user re-files
+things, so nothing repaints under them. The calendar uses a single-hue pink
+ramp split at spending quantiles, so one rent day does not wash out the month.
+
+Filters narrow in this order: account → date range (presets or the brush over
+the whole history) → a focused category (every chart) → an opened period (the
+details below the divider) → a day, merchant or search (the transaction list).
+
+`window.Spendscape` exposes `state()`, `txns()`, `loadSample()`,
+`importText(name, text)`, `setPreset()`, `setGran()`, `setMode()`, `setFocus()`
+and `togglePeriod(isoDate)` for driving the app from a test harness.
 
 ## Deployment
 
