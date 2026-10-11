@@ -44,6 +44,25 @@
         </div>
       </header>
 
+      <!-- ── Locked: kept statements wait for their password ────────────── -->
+      <section class="welcome locked" id="locked" aria-labelledby="locked-title" hidden>
+        <div class="welcome-copy">
+          <p class="eyebrow"><span aria-hidden="true">&#128274;</span> Locked</p>
+          <h2 class="welcome-title" id="locked-title">Your statements are <span class="accent">locked</span></h2>
+          <p class="welcome-text" id="locked-text">
+            They are kept in this browser, encrypted with the password you chose. Type it to open them.
+          </p>
+        </div>
+        <form class="unlock" id="unlock-form">
+          <input type="text" name="username" autocomplete="username" value="Spendscape" hidden />
+          <label class="sr-only" for="unlock-input">Password</label>
+          <input type="password" id="unlock-input" name="password" autocomplete="current-password" placeholder="Password" spellcheck="false" />
+          <button class="btn btn-pink" type="submit" id="unlock-ok">Unlock</button>
+        </form>
+        <p class="unlock-error" id="unlock-error" role="alert" hidden></p>
+        <button class="link-btn" type="button" id="unlock-forgot">Forgot it? Start over</button>
+      </section>
+
       <!-- ── Welcome: before any statements are loaded ─────────────────── -->
       <section class="welcome" id="welcome">
         <div class="welcome-scape" aria-hidden="true">
@@ -86,7 +105,7 @@
         </div>
 
         <ul class="promises">
-          <li><span class="promise-icon" aria-hidden="true">&#128274;</span><span><strong>Stays on your device.</strong> Files are read and kept right here in this browser, never uploaded anywhere.</span></li>
+          <li><span class="promise-icon" aria-hidden="true">&#128274;</span><span><strong>Stays on your device.</strong> Files are read right here in this browser, never uploaded, and kept only locked with your password.</span></li>
           <li><span class="promise-icon" aria-hidden="true">&#127991;&#65039;</span><span><strong>Sorts itself.</strong> Hundreds of merchants are recognised, and anything you re-file teaches it for next time.</span></li>
           <li><span class="promise-icon" aria-hidden="true">&#128200;</span><span><strong>Made to explore.</strong> Hover, click and drag through months, categories and days.</span></li>
         </ul>
@@ -323,8 +342,9 @@
       </label>
       <label class="menu-row menu-check">
         <input type="checkbox" id="remember-toggle" checked />
-        <span>Remember my statements on this device</span>
+        <span>Keep my statements in this browser, locked with a password</span>
       </label>
+      <button class="menu-item" type="button" role="menuitem" id="menu-password" hidden>Change password</button>
       <button class="menu-item" type="button" role="menuitem" id="menu-export">Download categorised CSV</button>
       <button class="menu-item" type="button" role="menuitem" id="menu-rules">Forget my category changes</button>
       <button class="menu-item is-danger" type="button" role="menuitem" id="menu-clear">Clear everything</button>
@@ -419,6 +439,25 @@
       </div>
     </dialog>
 
+    <!-- ── Choosing the password that locks kept statements ───────────── -->
+    <dialog class="sheet" id="dlg-lock" aria-labelledby="lock-title">
+      <form method="dialog" class="sheet-x"><button aria-label="Close" value="cancel">&#10005;</button></form>
+      <h2 class="sheet-title" id="lock-title">Keep your statements, locked</h2>
+      <p class="sheet-text" id="lock-intro"></p>
+      <form id="lock-form" class="lock-form">
+        <input type="text" name="username" autocomplete="username" value="Spendscape" hidden />
+        <label class="field"><span>Password</span><input type="password" id="lock-pass" name="new-password" autocomplete="new-password" spellcheck="false" /></label>
+        <label class="field"><span>Type it again</span><input type="password" id="lock-pass2" autocomplete="new-password" spellcheck="false" /></label>
+        <p class="pass-wrong" id="lock-error" role="alert" hidden></p>
+        <p class="lock-note">At least 8 characters. It can't be recovered: if you forget it, you would add your statements again.</p>
+        <div class="sheet-actions sheet-actions-row">
+          <span class="spacer"></span>
+          <button class="btn btn-ghost" type="button" id="lock-skip">Don't keep them</button>
+          <button class="btn btn-pink" type="submit" id="lock-ok">Lock and keep</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- ── PDF password ────────────────────────────────────────────────── -->
     <dialog class="sheet" id="dlg-pass" aria-labelledby="pass-title">
       <form method="dialog" class="sheet-x"><button aria-label="Close" value="cancel">&#10005;</button></form>
@@ -465,6 +504,7 @@
     <script src="charts.js"></script>
     <script src="sample.js"></script>
     <script src="pdfstatement.js"></script>
+    <script src="vault.js"></script>
     <script src="spendscape.js"></script>
   </body>
 </html>

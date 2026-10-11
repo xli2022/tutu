@@ -25,6 +25,7 @@ apps/
     index.html  spendscape.css  spendscape.js   # page, styles, state + wiring
     formats.js  categories.js  analysis.js      # parsing, categorising, numbers
     pdfstatement.js                             # reading PDF statements
+    vault.js                                    # password-locked storage
     charts.js   sample.js                       # SVG charts, demo statements
     vendor/pdfjs/                               # Mozilla pdf.js, unmodified
 ```
@@ -134,16 +135,27 @@ code evaluation and every fetch it could make (fonts, character maps,
 WebAssembly, colour profiles) switched off; a locked PDF's password is used to
 open it and is not kept.
 
-Everything is kept in the browser's `localStorage` (one entry,
-`tutu.spendscape.v1`) so it is all there on the next visit: the statements, the
-user's category changes, any column layouts they fixed, and display
-preferences. Spreadsheets and OFX/QIF files are kept as their text and read
-again on load; a PDF is kept as the transactions read from it, never the file;
-the sample data is never kept. Unticking *Remember my statements on this
-device* in the menu drops the statements from storage, and *Clear everything*
-wipes it all. If the browser's storage fills up, the biggest statements are
-left out (the user is told which) and the rest are kept; a save waiting on its
-timer is made when the tab is hidden or closed.
+**What is kept is locked with the user's password.** After the first import,
+Spendscape offers to keep the statements in the browser (`localStorage`, entry
+`tutu.spendscape.v1`) for next time, sealed with a password the user chooses;
+the next visit opens on a lock screen that asks for it. `vault.js` seals with
+the browser's own Web Crypto: PBKDF2-SHA-256 with a random salt and 600,000
+iterations turns the password into a non-extractable AES-256-GCM key, and each
+save is gzipped (where the browser can) and encrypted under a fresh random IV;
+a wrong password or any tampering fails GCM's check. The password is never
+stored and the key lives only in the open tab.
+
+Everything about the user's money goes in the vault: the statements
+(spreadsheets and OFX/QIF files as their text, a PDF as the transactions read
+from it, never the file), their category changes and the column layouts they
+fixed. Only display choices stay readable; the sample data is never kept, and
+without a password nothing about their money is kept at all. A forgotten
+password can't be recovered, only *started over*. The menu can stop keeping
+(which deletes the locked copy), change the password, or clear everything. If
+storage fills up, the biggest statements are left out and the user is told
+which. Open tabs follow each other's saves rather than overwrite them, and a
+tab whose password was changed elsewhere locks itself. Data an earlier version
+kept readable is loaded once, and the user is asked to lock it or remove it.
 
 #### Reading statements
 

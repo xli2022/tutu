@@ -86,6 +86,23 @@
   };
 
   /* ── Storage ─────────────────────────────────────────────────────── */
+  // Version 3: everything Spendscape keeps about the user's money (the
+  // statements, their category changes and the column layouts they fixed)
+  // is sealed in a vault locked with a password they choose, and nothing
+  // about their money is kept without one. Only display choices stay
+  // readable. Versions 1 and 2 kept it all readable: such data is loaded
+  // and the user asked to lock it.
+  var STORE_VERSION = 3;
+  var Vault = kit.vault;
+
+  var vault = null;        // the open vault { key, salt, iter }: in memory only
+  var locked = null;       // a sealed vault waiting for its password
+  var legacy = false;      // readable data from before version 3, not yet locked
+  var keepAsked = false;   // asked on this visit whether to keep the statements
+  var unkept = {};         // file id -> true: too big for this browser's storage
+  var lastSaved = null;    // what was last written, so an unchanged state isn't written again
+  var saveTimer = null, adopting = false, saving = null, saveAgain = false;
+
   function loadStore() {
     try {
       var raw = localStorage.getItem(STORE_KEY);
@@ -93,59 +110,97 @@
     } catch (e) { return {}; }
   }
 
-  var saveTimer = null, adopting = false;
   function save() {
     if (adopting) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 300);
   }
 
-  // Version 2: statements are kept unless the user switches that off.
-  // (In version 1 keeping them was off unless switched on.)
-  var STORE_VERSION = 2;
-  var unkept = {};    // file id -> true: too big for this browser's storage
-  var lastSaved = null;   // what this tab last wrote, so an unchanged state isn't written again
-
-  // Everything is kept in this browser for the next visit: category
-  // changes, fixed layouts, display choices, and the statements unless the
-  // user said not to. The sample data never is. A PDF is kept as what was
-  // read from it, never the file itself. If the browser's storage is full,
-  // the biggest statements are left out until the rest fit.
+  // One save at a time; one asked for meanwhile runs next, with whatever
+  // is current by then.
   function saveNow() {
     clearTimeout(saveTimer);
     saveTimer = null;
-    var p = state.prefs;
-    var head = '{"v":' + STORE_VERSION +
-      ',"rules":' + JSON.stringify(state.rules) +
-      ',"overrides":' + JSON.stringify(state.overrides) +
-      ',"layouts":' + JSON.stringify(state.layouts) +
-      ',"prefs":' + JSON.stringify({ gran: p.gran, mode: p.mode, hidden: p.hidden, currency: p.currency, remember: p.remember, preset: p.preset }) +
-      ',"files":[';
-    var kept = p.remember ? state.files.filter(function (f) { return !f.sample; }) : [];
-    var parts = kept.map(storedForm), left = [];
-    for (;;) {
-      var json = head + parts.join(",") + "]}";
-      try {
-        if (json !== lastSaved) localStorage.setItem(STORE_KEY, json);
-        lastSaved = json;
-        kept.forEach(function (f) { f.saved = true; });
-        break;
-      } catch (e) {
-        if (!parts.length) return;   // no storage here at all
-        var big = 0;
-        parts.forEach(function (part, i) { if (part.length > parts[big].length) big = i; });
-        left.push(kept[big]);
-        kept.splice(big, 1);
-        parts.splice(big, 1);
+    if (saving) { saveAgain = true; return saving; }
+    // Resolves with the statements newly found too big to keep.
+    saving = writeStore().then(null, function () { return []; }).then(function (news) {
+      saving = null;
+      news = news || [];
+      if (saveAgain) {
+        saveAgain = false;
+        return saveNow().then(function (more) { return news.concat(more); });
       }
+      return news;
+    });
+    return saving;
+  }
+
+  function tooBig(files) {
+    return (files.length === 1 ? files[0].name + " is" : files.length + " statements are") +
+      " too big to keep in this browser, so " + (files.length === 1 ? "it" : "they") + " will need adding again next time.";
+  }
+
+  function prefsJson() {
+    var p = state.prefs;
+    return JSON.stringify({ gran: p.gran, mode: p.mode, hidden: p.hidden, currency: p.currency, remember: p.remember, preset: p.preset });
+  }
+
+  function isEmpty(o) {
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) return false;
+    return true;
+  }
+
+  // Display choices always; the statements, category changes and layouts
+  // only sealed in the open vault. If the browser's storage is full, the
+  // biggest statements are left out until the rest fit.
+  function writeStore() {
+    // Locked, or older readable data not yet locked: what is stored stays.
+    if (locked || legacy) return Promise.resolve([]);
+    var prefs = prefsJson();
+    var envelope = function (sealed) {
+      return '{"v":' + STORE_VERSION + ',"prefs":' + prefs + (sealed ? ',"vault":' + JSON.stringify(sealed) : "") + "}";
+    };
+    var kept = state.files.filter(function (f) { return !f.sample; });
+    var nothing = !kept.length && isEmpty(state.rules) && isEmpty(state.overrides) && isEmpty(state.layouts);
+    if (!vault || !state.prefs.remember || nothing) {
+      var plain = envelope(null);
+      if (plain !== lastSaved) {
+        localStorage.setItem(STORE_KEY, plain);
+        lastSaved = plain;
+      }
+      return Promise.resolve([]);
     }
-    var news = left.filter(function (f) { return !unkept[f.id]; });
-    unkept = {};
-    left.forEach(function (f) { unkept[f.id] = true; });
-    if (news.length) {
-      toast((news.length === 1 ? news[0].name + " is" : news.length + " statements are") +
-        " too big to keep in this browser, so " + (news.length === 1 ? "it" : "they") + " will need adding again next time.", null, null, 8000);
+    var head = '{"rules":' + JSON.stringify(state.rules) + ',"overrides":' + JSON.stringify(state.overrides) +
+      ',"layouts":' + JSON.stringify(state.layouts) + ',"files":[';
+    var parts = kept.map(storedForm), left = [], key = vault;
+    function attempt() {
+      var body = head + parts.join(",") + "]}", what = prefs + "\n" + body;
+      if (what === lastSaved) return Promise.resolve();
+      return Vault.seal(key, body).then(function (sealed) {
+        // Locked again, or the password changed, while this was sealing.
+        if (vault !== key) return;
+        try {
+          localStorage.setItem(STORE_KEY, envelope(sealed));
+        } catch (e) {
+          if (!parts.length) return;
+          var big = 0;
+          parts.forEach(function (part, i) { if (part.length > parts[big].length) big = i; });
+          left.push(kept[big]);
+          kept.splice(big, 1);
+          parts.splice(big, 1);
+          return attempt();
+        }
+        lastSaved = what;
+        kept.forEach(function (f) { f.saved = true; });
+      });
     }
+    return attempt().then(function () {
+      var news = left.filter(function (f) { return !unkept[f.id]; });
+      unkept = {};
+      left.forEach(function (f) { unkept[f.id] = true; });
+      if (news.length) toast(tooBig(news), null, null, 8000);
+      return news;
+    });
   }
 
   // A file's stored form, worked out again only when the file changes, so
@@ -259,6 +314,7 @@
   function importFiles(list) {
     var files = [].slice.call(list || []);
     if (!files.length) return;
+    if (locked) { toast("Unlock your statements first."); return; }
     importing = importing.then(function () {
       startBatch();
       return Promise.all(files.map(function (f) {
@@ -482,6 +538,10 @@
     if (b.dupFiles) msg.push(b.dupFiles === 1 ? "That file is already in." : b.dupFiles + " files were already in.");
     msg = msg.concat(b.problems);
     if (msg.length) toast(msg.join(" "), null, null, b.problems.length ? 8000 : 4200);
+    if (b.files) {
+      saveNow();
+      askToKeep();
+    }
   }
 
   function loadSample() {
@@ -642,6 +702,13 @@
   var charts = {};
 
   function render(fresh) {
+    $("locked").hidden = !locked;
+    document.querySelector(".topbar-actions").hidden = !!locked;
+    if (locked) {
+      $("welcome").hidden = $("dash").hidden = true;
+      renderFoot();
+      return;
+    }
     var has = state.all.length > 0;
     $("welcome").hidden = has;
     $("dash").hidden = !has;
@@ -702,9 +769,9 @@
   function renderFoot() {
     var n = $("foot-memory");
     var mine = state.files.some(function (f) { return !f.sample; });
-    n.textContent = !mine ? "" : state.prefs.remember
-      ? "They are kept in this browser for next time; turn that off or clear them from the ⋯ menu."
-      : "They aren't kept after this tab closes; only your category changes are.";
+    n.textContent = locked || !mine ? "" : vault && state.prefs.remember
+      ? "They are kept in this browser, locked with your password; change that from the ⋯ menu."
+      : "They aren't kept after this tab closes.";
   }
 
   /* Filter row */
@@ -1930,7 +1997,9 @@
       o.value = c;
     });
     sel.value = state.prefs.currency;
-    $("remember-toggle").checked = state.prefs.remember;
+    $("remember-toggle").checked = !!vault && state.prefs.remember;
+    $("remember-toggle").disabled = !Vault.supported();
+    $("menu-password").hidden = !vault || !state.prefs.remember;
     m.hidden = false;
     btn.setAttribute("aria-expanded", "true");
     var r = btn.getBoundingClientRect();
@@ -1987,11 +2056,23 @@
   }
 
   /* ── Restore ─────────────────────────────────────────────────────── */
-  function restore(adopt) {
+  // At start: display choices at once; a vault waits for its password on
+  // the lock screen; readable data from an older version is loaded and
+  // the user asked to lock it.
+  function restore() {
     var s = loadStore();
-    state.rules = s.rules || {};
-    state.overrides = s.overrides || {};
-    state.layouts = s.layouts || {};
+    applyPrefs(s);
+    if (s.vault) { locked = s.vault; return; }
+    if ((s.v || 1) >= STORE_VERSION) return;
+    var files = state.prefs.remember && s.files ? s.files : [];
+    if (!files.length && isEmpty(s.rules || {}) && isEmpty(s.overrides || {}) && isEmpty(s.layouts || {})) return;
+    legacy = true;
+    applyPayload({ rules: s.rules, overrides: s.overrides, layouts: s.layouts, files: files });
+    rebuild();
+    resetView();
+  }
+
+  function applyPrefs(s) {
     var p = s.prefs || {};
     if (p.gran) state.prefs.gran = p.gran;
     if (p.mode) state.prefs.mode = p.mode;
@@ -1999,31 +2080,239 @@
     if (p.currency) state.prefs.currency = p.currency;
     if (p.preset) state.prefs.preset = p.preset;
     // An "off" saved before version 2 was only the old default.
-    state.prefs.remember = s.v >= STORE_VERSION ? p.remember !== false : true;
-    if (!state.prefs.remember || !s.files || !s.files.length) return;
-    s.files.forEach(function (sf) {
-      try { restoreFile(sf); } catch (e) { /* a damaged record is dropped */ }
-    });
-    if (adopt) return;
-    rebuild();
-    resetView();
+    state.prefs.remember = (s.v || 1) >= 2 ? p.remember !== false : true;
   }
 
-  // Another Spendscape tab saved: take its copy, so this tab never writes
-  // back an older one over statements added or removed there. What only
+  // What a vault (or an older readable store) holds, put to use. What only
   // this tab has stays: sample data, statements too big to keep, and any
-  // not saved yet. If the other tab stopped keeping statements, this one
-  // keeps what it shows until it closes.
-  function adoptStore() {
+  // not saved yet.
+  function applyPayload(d) {
     var mine = state.files;
+    state.rules = d.rules || {};
+    state.overrides = d.overrides || {};
+    state.layouts = d.layouts || {};
     state.files = [];
-    restore(true);
-    var stay = state.prefs.remember
-      ? mine.filter(function (f) { return f.sample || unkept[f.id] || !f.saved; })
-      : mine;
-    stay.forEach(function (f) {
-      if (!state.files.some(function (x) { return x.id === f.id; })) state.files.push(f);
+    (d.files || []).forEach(function (sf) {
+      try { restoreFile(sf); } catch (e) { /* a damaged record is dropped */ }
     });
+    mine.forEach(function (f) {
+      if ((f.sample || unkept[f.id] || !f.saved) && !state.files.some(function (x) { return x.id === f.id; })) state.files.push(f);
+    });
+  }
+
+  /* ── Lock screen ─────────────────────────────────────────────────── */
+  function unlock() {
+    var input = $("unlock-input"), pw = input.value, sealed = locked;
+    if (!pw || !sealed) { input.focus(); return; }
+    $("unlock-ok").disabled = input.disabled = true;
+    $("unlock-ok").textContent = "Unlocking…";
+    $("unlock-error").hidden = true;
+    Vault.unlock(pw, sealed).then(function (r) {
+      if (locked !== sealed) return;   // what is stored changed meanwhile: try again
+      vault = r.vault;
+      locked = null;
+      keepAsked = true;
+      applyPayload(JSON.parse(r.text));
+      rebuild();
+      resetView();
+      lastSaved = prefsJson() + "\n" + r.text;
+      render(true);
+      saveNow();   // anything this tab added while locked
+    }, function (err) {
+      var e = $("unlock-error");
+      e.textContent = err && err.name === "WrongPassword" ? "That password didn't unlock them. Try again." : "This browser couldn't unlock them.";
+      e.hidden = false;
+    }).then(function () {
+      input.value = "";
+      $("unlock-ok").disabled = input.disabled = false;
+      $("unlock-ok").textContent = "Unlock";
+      if (locked) input.focus();
+    });
+  }
+
+  function startOver() {
+    if (!window.confirm("Start over? This deletes the statements and category changes locked in this browser. It can't be undone.")) return;
+    locked = vault = null;
+    legacy = keepAsked = false;
+    state.files = [];
+    state.all = [];
+    state.rules = {};
+    state.overrides = {};
+    state.layouts = {};
+    unkept = {};
+    lastSaved = null;
+    state.view.range = null;
+    render(true);
+    saveNow();
+    toast("Everything that was locked is deleted. Add your statements to start again.");
+  }
+
+  // Another tab locked with a password this one doesn't hold: lock here
+  // too. Anything only this tab had waits for the unlock.
+  function lockTab(sealed, why) {
+    locked = sealed;
+    vault = null;
+    lastSaved = null;
+    state.files = state.files.filter(function (f) { return !f.saved && !f.sample; });
+    state.all = [];
+    ["dlg-files", "dlg-map", "dlg-lock"].forEach(function (id) { if ($(id).open) $(id).close(); });
+    closeMenu();
+    closeCatPop(false);
+    $("locked-text").textContent = why;
+    render(true);
+  }
+
+  /* ── Choosing a password ─────────────────────────────────────────── */
+  var lockMode = null;
+  var LOCK_TEXT = {
+    first: ["Keep your statements, locked",
+      "Spendscape can keep these statements in this browser for next time, encrypted with a password you choose. You'll type it each time you open Spendscape.",
+      "Don't keep them", "Lock and keep"],
+    menu: ["Keep your statements, locked",
+      "Your statements will be kept in this browser, encrypted with a password you choose. You'll type it each time you open Spendscape.",
+      "Cancel", "Lock and keep"],
+    legacy: ["Lock what Spendscape kept",
+      "Spendscape now keeps statements and category changes only encrypted with a password you choose. Choose one to keep what this browser holds; otherwise it is removed.",
+      "Remove it", "Lock and keep"],
+    change: ["Change your password", "Your statements will be locked with the new password from now on.", "Cancel", "Change password"]
+  };
+
+  function openLockDialog(mode) {
+    lockMode = mode;
+    var t = LOCK_TEXT[mode];
+    $("lock-title").textContent = t[0];
+    $("lock-intro").textContent = t[1];
+    $("lock-skip").textContent = t[2];
+    $("lock-ok").textContent = t[3];
+    $("lock-pass").value = $("lock-pass2").value = "";
+    $("lock-error").hidden = true;
+    lockBusy(false);
+    var dlg = $("dlg-lock");
+    if (!dlg.open) dlg.showModal();
+    $("lock-pass").focus();
+  }
+
+  function lockBusy(on) {
+    $("lock-pass").disabled = $("lock-pass2").disabled = $("lock-ok").disabled = $("lock-skip").disabled = on;
+    if (on) $("lock-ok").textContent = "Locking…";
+    else if (lockMode) $("lock-ok").textContent = LOCK_TEXT[lockMode][3];
+  }
+
+  function submitLock() {
+    var a = $("lock-pass").value, b = $("lock-pass2").value, err = $("lock-error");
+    var problem = a.length < 8 ? "Use at least 8 characters." : a !== b ? "The two passwords don't match." : "";
+    if (problem) {
+      err.textContent = problem;
+      err.hidden = false;
+      $(a.length < 8 ? "lock-pass" : "lock-pass2").focus();
+      return;
+    }
+    var mode = lockMode;
+    lockBusy(true);
+    Vault.create(a).then(function (v) {
+      $("lock-pass").value = $("lock-pass2").value = "";
+      lockMode = null;
+      $("dlg-lock").close();
+      vault = v;
+      legacy = false;
+      keepAsked = true;
+      state.prefs.remember = true;
+      lastSaved = null;
+      renderFoot();
+      return saveNow().then(function (news) {
+        var done = mode === "change" ? "Your password is changed." : "Your statements are kept in this browser, locked with your password.";
+        toast(news.length ? done + " " + tooBig(news) : done, null, null, news.length ? 8000 : 0);
+      });
+    }, function () {
+      lockBusy(false);
+      err.textContent = "This browser couldn't lock them.";
+      err.hidden = false;
+    });
+  }
+
+  // "Don't keep them" / "Remove it" / "Cancel" (skip), or the dialog closed
+  // (later: nothing kept for now, and asked again another time).
+  function closeLock(skip) {
+    var mode = lockMode;
+    lockMode = null;
+    $("lock-pass").value = $("lock-pass2").value = "";
+    if ($("dlg-lock").open) $("dlg-lock").close();
+    if (!skip) return;
+    if (mode === "first") {
+      state.prefs.remember = false;
+      saveNow();
+      toast("Your statements won't be kept after this tab closes. You can change that in the ⋯ menu.");
+    } else if (mode === "legacy") {
+      legacy = false;
+      state.prefs.remember = false;
+      lastSaved = null;
+      saveNow();
+      toast("What Spendscape kept in this browser is removed. It stays on screen until you close this tab.");
+    }
+    renderFoot();
+  }
+
+  // After statements come in: ask once a visit whether to keep them.
+  function askToKeep() {
+    if (vault || locked || legacy || keepAsked || !state.prefs.remember || !Vault.supported()) return;
+    if (!state.files.some(function (f) { return !f.sample; })) return;
+    keepAsked = true;
+    openLockDialog("first");
+  }
+
+  /* ── Other tabs ──────────────────────────────────────────────────── */
+  // Another Spendscape tab saved. Follow it, so this tab never writes an
+  // older copy back over statements added or removed there.
+  function onStoreChanged(cleared) {
+    lastSaved = null;
+    if (cleared) {
+      // Another page on this site cleared all of its storage: put ours back.
+      if (locked) {
+        try { localStorage.setItem(STORE_KEY, '{"v":' + STORE_VERSION + ',"prefs":' + prefsJson() + ',"vault":' + JSON.stringify(locked) + "}"); } catch (e) { /* full */ }
+        return Promise.resolve();
+      }
+      return saveNow();
+    }
+    var s = loadStore();
+    applyPrefs(s);
+    if (locked) {
+      // Still locked here: the password will open whatever is stored now.
+      if (s.vault) locked = s.vault;
+      else { locked = null; rebuild(); }
+      render(true);
+      return Promise.resolve();
+    }
+    if (!s.vault) {
+      if (legacy) legacy = false;
+      if (!state.prefs.remember) {
+        // The other tab stopped keeping statements: this one keeps showing
+        // them until it closes.
+        vault = null;
+      } else if (vault) {
+        // It holds nothing now (all removed, or started over).
+        vault = null;
+        keepAsked = false;
+        applyPayload({});
+      }
+      adopt();
+      return Promise.resolve();
+    }
+    if (vault && Vault.sameSalt(vault, s.vault)) {
+      return Vault.open(vault, s.vault).then(function (text) {
+        applyPayload(JSON.parse(text));
+        lastSaved = prefsJson() + "\n" + text;
+        adopt();
+      }, function () {
+        lockTab(s.vault, "Your statements were locked again in another tab. Type the password to open them here.");
+      });
+    }
+    lockTab(s.vault, vault ? "The password was changed in another tab. Type the new one to open your statements here."
+      : "Your statements were locked in another tab. Type the password to open them here.");
+    legacy = false;
+    return Promise.resolve();
+  }
+
+  function adopt() {
     rebuild();
     if (state.all.length) clampView(); else state.view.range = null;
     adopting = true;
@@ -2071,13 +2360,17 @@
     var flush = function () { if (saveTimer) saveNow(); };
     window.addEventListener("pagehide", flush);
     document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flush(); });
+    var following = Promise.resolve();
     window.addEventListener("storage", function (e) {
       if (e.key !== STORE_KEY && e.key !== null) return;
-      lastSaved = null;
-      if (e.key === STORE_KEY) adoptStore();
-      // Another page on this site cleared all of its storage: put ours back.
-      else saveNow();
+      following = following.then(function () { return onStoreChanged(e.key === null); }).then(null, function () { /* keep following */ });
     });
+    $("unlock-form").addEventListener("submit", function (e) { e.preventDefault(); unlock(); });
+    $("unlock-forgot").addEventListener("click", startOver);
+    $("lock-form").addEventListener("submit", function (e) { e.preventDefault(); submitLock(); });
+    $("lock-skip").addEventListener("click", function () { closeLock(true); });
+    $("dlg-lock").addEventListener("cancel", function (e) { e.preventDefault(); closeLock(false); });
+    $("dlg-lock").querySelector(".sheet-x").addEventListener("submit", function (e) { e.preventDefault(); closeLock(false); });
     var input = $("file-input");
     function pick() { input.value = ""; input.click(); }
     input.addEventListener("change", function () { importFiles(input.files); });
@@ -2219,11 +2512,30 @@
       updateCurrency();
       render();
     });
+    // Keeping statements needs a password; stopping deletes the locked copy.
     $("remember-toggle").addEventListener("change", function () {
+      if (this.checked && !vault) {
+        this.checked = false;
+        closeMenu();
+        openLockDialog("menu");
+        return;
+      }
       state.prefs.remember = this.checked;
+      if (!this.checked) {
+        vault = null;
+        legacy = false;
+        keepAsked = true;
+      }
+      $("menu-password").hidden = !vault;
+      lastSaved = null;
       saveNow();
       renderFoot();
-      toast(this.checked ? "Your statements will be kept in this browser until you clear them." : "Your statements are no longer kept in this browser, and will be gone after this tab closes.");
+      toast(this.checked ? "Your statements are kept in this browser, locked with your password."
+        : "Your statements are no longer kept in this browser, and the locked copy is deleted. They stay on screen until you close this tab.");
+    });
+    $("menu-password").addEventListener("click", function () {
+      closeMenu();
+      openLockDialog("change");
     });
     $("menu-export").addEventListener("click", function () {
       closeMenu();
@@ -2255,6 +2567,8 @@
       state.prefs = { gran: "month", mode: "bars", hidden: {}, currency: "", remember: true, account: "", preset: "" };
       unkept = {};
       lastSaved = null;
+      vault = locked = null;
+      legacy = keepAsked = false;
       state.view.range = null;
       render();
       try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing stored */ }
@@ -2351,6 +2665,9 @@
         }),
         count: state.all.length,
         remember: state.prefs.remember,
+        locked: !!locked,
+        vault: !!vault,
+        legacy: legacy,
         currency: currency,
         range: state.view.range && { from: F.isoOf(state.view.range.from), to: F.isoOf(state.view.range.to) },
         preset: state.view.preset,
@@ -2388,4 +2705,6 @@
   wire();
   restore();
   render(true);
+  if (legacy) openLockDialog("legacy");
+  else if (locked) $("unlock-input").focus();
 })();
