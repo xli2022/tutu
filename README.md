@@ -132,11 +132,18 @@ the page; there are no network requests. PDFs are opened by the vendored pdf.js
 in a worker served from the same site, given the file's bytes directly, with
 code evaluation and every fetch it could make (fonts, character maps,
 WebAssembly, colour profiles) switched off; a locked PDF's password is used to
-open it and is not kept. `localStorage` keeps only the user's category changes,
-any column layouts they fixed, and display preferences. The statements
-themselves are kept only if the user ticks *Remember my statements on this
-device* (for a PDF, the transactions read from it, never the file), and *Clear
-everything* wipes it all.
+open it and is not kept.
+
+Everything is kept in the browser's `localStorage` (one entry,
+`tutu.spendscape.v1`) so it is all there on the next visit: the statements, the
+user's category changes, any column layouts they fixed, and display
+preferences. Spreadsheets and OFX/QIF files are kept as their text and read
+again on load; a PDF is kept as the transactions read from it, never the file;
+the sample data is never kept. Unticking *Remember my statements on this
+device* in the menu drops the statements from storage, and *Clear everything*
+wipes it all. If the browser's storage fills up, the biggest statements are
+left out (the user is told which) and the rest are kept; a save waiting on its
+timer is made when the tab is hidden or closed.
 
 #### Reading statements
 

@@ -74,7 +74,7 @@
     rules: {},          // merchant key -> category, made by the user
     overrides: {},      // transaction id -> category, made by the user
     layouts: {},        // CSV header signature -> column mapping the user fixed
-    prefs: { gran: "month", mode: "bars", hidden: {}, currency: "", remember: false, account: "", preset: "" },
+    prefs: { gran: "month", mode: "bars", hidden: {}, currency: "", remember: true, account: "", preset: "" },
     view: {
       range: null, preset: "12m", focus: null, period: null, day: null, merchant: null,
       search: "", sort: { key: "date", dir: -1 }, limit: 50, merchantsAll: false, catsAll: false,
@@ -93,48 +93,79 @@
     } catch (e) { return {}; }
   }
 
-  var saveTimer = null;
+  var saveTimer = null, adopting = false;
   function save() {
+    if (adopting) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 300);
   }
 
-  // Category changes and fixed layouts are always kept (they are small and
-  // make the next visit better); the statements themselves only when the
-  // user says so.
+  // Version 2: statements are kept unless the user switches that off.
+  // (In version 1 keeping them was off unless switched on.)
+  var STORE_VERSION = 2;
+  var unkept = {};    // file id -> true: too big for this browser's storage
+  var lastSaved = null;   // what this tab last wrote, so an unchanged state isn't written again
+
+  // Everything is kept in this browser for the next visit: category
+  // changes, fixed layouts, display choices, and the statements unless the
+  // user said not to. The sample data never is. A PDF is kept as what was
+  // read from it, never the file itself. If the browser's storage is full,
+  // the biggest statements are left out until the rest fit.
   function saveNow() {
+    clearTimeout(saveTimer);
+    saveTimer = null;
     var p = state.prefs;
-    var data = {
-      v: 1,
-      rules: state.rules,
-      overrides: state.overrides,
-      layouts: state.layouts,
-      prefs: { gran: p.gran, mode: p.mode, hidden: p.hidden, currency: p.currency, remember: p.remember, preset: p.preset }
-    };
-    if (p.remember) {
-      data.files = state.files.map(function (f) {
-        // For a PDF, what was read from it: never the file itself.
-        if (f.format === "pdf") {
-          return { id: f.id, name: f.name, account: f.account, pdf: {
-            sign: f.sign, currency: f.currency, kind: f.pdf.kind, checks: f.pdf.checks,
-            txns: f.read.map(function (t) { return [t.date, t.amount, t.desc]; })
-          } };
-        }
-        return { name: f.name, text: f.text, account: f.account, mapping: f.format === "csv" || f.format === "tsv" ? f.mapping : null };
-      });
+    var head = '{"v":' + STORE_VERSION +
+      ',"rules":' + JSON.stringify(state.rules) +
+      ',"overrides":' + JSON.stringify(state.overrides) +
+      ',"layouts":' + JSON.stringify(state.layouts) +
+      ',"prefs":' + JSON.stringify({ gran: p.gran, mode: p.mode, hidden: p.hidden, currency: p.currency, remember: p.remember, preset: p.preset }) +
+      ',"files":[';
+    var kept = p.remember ? state.files.filter(function (f) { return !f.sample; }) : [];
+    var parts = kept.map(storedForm), left = [];
+    for (;;) {
+      var json = head + parts.join(",") + "]}";
+      try {
+        if (json !== lastSaved) localStorage.setItem(STORE_KEY, json);
+        lastSaved = json;
+        kept.forEach(function (f) { f.saved = true; });
+        break;
+      } catch (e) {
+        if (!parts.length) return;   // no storage here at all
+        var big = 0;
+        parts.forEach(function (part, i) { if (part.length > parts[big].length) big = i; });
+        left.push(kept[big]);
+        kept.splice(big, 1);
+        parts.splice(big, 1);
+      }
     }
-    try {
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-    } catch (e) {
-      if (!data.files) return;
-      p.remember = false;
-      $("remember-toggle").checked = false;
-      delete data.files;
-      data.prefs.remember = false;
-      try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e2) { /* storage unavailable */ }
-      toast("These statements are too big to keep on this device, so they won't be remembered.");
-      renderFoot();
+    var news = left.filter(function (f) { return !unkept[f.id]; });
+    unkept = {};
+    left.forEach(function (f) { unkept[f.id] = true; });
+    if (news.length) {
+      toast((news.length === 1 ? news[0].name + " is" : news.length + " statements are") +
+        " too big to keep in this browser, so " + (news.length === 1 ? "it" : "they") + " will need adding again next time.", null, null, 8000);
     }
+  }
+
+  // A file's stored form, worked out again only when the file changes, so
+  // that saving after a change of view costs next to nothing.
+  function storedForm(f) {
+    var c = f._stored;
+    if (!c || c.account !== f.account || c.mapping !== f.mapping || c.sign !== f.sign || c.read !== f.read || c.text !== f.text) {
+      c = f._stored = { account: f.account, mapping: f.mapping, sign: f.sign, read: f.read, text: f.text, json: JSON.stringify(fileRecord(f)) };
+    }
+    return c.json;
+  }
+
+  function fileRecord(f) {
+    if (f.format === "pdf") {
+      return { id: f.id, name: f.name, account: f.account, pdf: {
+        sign: f.sign, currency: f.currency, kind: f.pdf.kind, checks: f.pdf.checks,
+        txns: f.read.map(function (t) { return [t.date, t.amount, t.desc]; })
+      } };
+    }
+    return { name: f.name, text: f.text, account: f.account, mapping: f.format === "csv" || f.format === "tsv" ? f.mapping : null };
   }
 
   /* ── Money ───────────────────────────────────────────────────────── */
@@ -403,7 +434,8 @@
       currency: res.currency || null,
       raw: res.txns,
       skipped: res.skipped,
-      issues: res.issues
+      issues: res.issues,
+      sample: !!item.sample
     };
     var tabular = !!file.rows;
     if (!tabular && !res.txns.length) {
@@ -455,7 +487,7 @@
   function loadSample() {
     var files = kit.sample.generate(new Date());
     startBatch();
-    files.forEach(ingest);
+    files.forEach(function (f) { f.sample = true; ingest(f); });
     continueBatch();
   }
 
@@ -669,9 +701,10 @@
 
   function renderFoot() {
     var n = $("foot-memory");
-    n.textContent = state.prefs.remember
-      ? "You asked this device to remember them; clear that any time from the ⋯ menu."
-      : state.all.length ? "Nothing is stored after you close the tab, apart from your category changes." : "";
+    var mine = state.files.some(function (f) { return !f.sample; });
+    n.textContent = !mine ? "" : state.prefs.remember
+      ? "They are kept in this browser for next time; turn that off or clear them from the ⋯ menu."
+      : "They aren't kept after this tab closes; only your category changes are.";
   }
 
   /* Filter row */
@@ -1879,7 +1912,8 @@
       el("p", "file-meta", li, f.name + " · " + f.raw.length.toLocaleString() + " transactions" +
         (f.raw.length ? " · " + A.formatDay(lo) + " – " + A.formatDay(hi) : "") +
         (f.skipped ? " · " + f.skipped + " rows skipped" : "") +
-        (f.pdf && f.pdf.checks.length ? (f.pdf.checks.every(function (c) { return c.ok; }) ? " · totals check out" : " · totals differ") : ""));
+        (f.pdf && f.pdf.checks.length ? (f.pdf.checks.every(function (c) { return c.ok; }) ? " · totals check out" : " · totals differ") : "") +
+        (f.sample ? " · sample data, not kept" : unkept[f.id] ? " · too big to keep in this browser" : ""));
     });
   }
 
@@ -1953,7 +1987,7 @@
   }
 
   /* ── Restore ─────────────────────────────────────────────────────── */
-  function restore() {
+  function restore(adopt) {
     var s = loadStore();
     state.rules = s.rules || {};
     state.overrides = s.overrides || {};
@@ -1964,46 +1998,86 @@
     if (p.hidden) state.prefs.hidden = p.hidden;
     if (p.currency) state.prefs.currency = p.currency;
     if (p.preset) state.prefs.preset = p.preset;
-    state.prefs.remember = !!p.remember;
+    // An "off" saved before version 2 was only the old default.
+    state.prefs.remember = s.v >= STORE_VERSION ? p.remember !== false : true;
     if (!state.prefs.remember || !s.files || !s.files.length) return;
     s.files.forEach(function (sf) {
-      if (sf.pdf) {
-        var read = (sf.pdf.txns || []).map(function (r) { return { date: r[0], amount: r[1], desc: r[2], memo: "", bankCat: "", account: "" }; });
-        state.files.push({
-          id: sf.id || "f" + hash(JSON.stringify(sf.pdf.txns)), name: sf.name, format: "pdf", account: sf.account,
-          text: null, rows: null, mapping: null, signature: "", delimiter: ",", currency: sf.pdf.currency || null,
-          read: read, sign: sf.pdf.sign || "asis", raw: withSign(read, sf.pdf.sign), skipped: 0, issues: [],
-          pdf: { kind: sf.pdf.kind || "unknown", period: null, checks: sf.pdf.checks || [] }
-        });
-        return;
-      }
-      var res, rows = null, map = sf.mapping;
-      if (map) {
-        var delim = F.detectDelimiter(sf.text);
-        rows = F.parseDelimited(sf.text, delim);
-        res = F.applyMapping(rows, map);
-        res.format = delim === "\t" ? "tsv" : "csv";
-        res.delimiter = delim;
-        var full = F.read(sf.name, sf.text, null);
-        res.currency = full.currency;
-        res.signature = full.signature;
-      } else {
-        res = F.read(sf.name, sf.text, state.layouts);
-        rows = res.rows || null;
-        map = res.mapping || null;
-      }
-      state.files.push({
-        id: "f" + hash(sf.text), name: sf.name, format: res.format, account: sf.account || res.account,
-        text: sf.text, rows: rows, mapping: map, signature: res.signature || "", delimiter: res.delimiter || ",",
-        currency: res.currency || null, raw: res.txns, skipped: res.skipped, issues: []
-      });
+      try { restoreFile(sf); } catch (e) { /* a damaged record is dropped */ }
     });
+    if (adopt) return;
     rebuild();
     resetView();
   }
 
+  // Another Spendscape tab saved: take its copy, so this tab never writes
+  // back an older one over statements added or removed there. What only
+  // this tab has stays: sample data, statements too big to keep, and any
+  // not saved yet. If the other tab stopped keeping statements, this one
+  // keeps what it shows until it closes.
+  function adoptStore() {
+    var mine = state.files;
+    state.files = [];
+    restore(true);
+    var stay = state.prefs.remember
+      ? mine.filter(function (f) { return f.sample || unkept[f.id] || !f.saved; })
+      : mine;
+    stay.forEach(function (f) {
+      if (!state.files.some(function (x) { return x.id === f.id; })) state.files.push(f);
+    });
+    rebuild();
+    if (state.all.length) clampView(); else state.view.range = null;
+    adopting = true;
+    try { render(true); } finally { adopting = false; }
+    if ($("dlg-files").open) renderFiles();
+  }
+
+  function restoreFile(sf) {
+    if (sf.pdf) {
+      var read = (sf.pdf.txns || []).map(function (r) { return { date: r[0], amount: r[1], desc: r[2], memo: "", bankCat: "", account: "" }; });
+      state.files.push({
+        id: sf.id || "f" + hash(JSON.stringify(sf.pdf.txns)), name: sf.name, format: "pdf", account: sf.account,
+        text: null, rows: null, mapping: null, signature: "", delimiter: ",", currency: sf.pdf.currency || null,
+        read: read, sign: sf.pdf.sign || "asis", raw: withSign(read, sf.pdf.sign), skipped: 0, issues: [],
+        pdf: { kind: sf.pdf.kind || "unknown", period: null, checks: sf.pdf.checks || [] }, saved: true
+      });
+      return;
+    }
+    var res, rows = null, map = sf.mapping;
+    if (map) {
+      var delim = F.detectDelimiter(sf.text);
+      rows = F.parseDelimited(sf.text, delim);
+      res = F.applyMapping(rows, map);
+      res.format = delim === "\t" ? "tsv" : "csv";
+      res.delimiter = delim;
+      var full = F.read(sf.name, sf.text, null);
+      res.currency = full.currency;
+      res.signature = full.signature;
+    } else {
+      res = F.read(sf.name, sf.text, state.layouts);
+      rows = res.rows || null;
+      map = res.mapping || null;
+    }
+    state.files.push({
+      id: "f" + hash(sf.text), name: sf.name, format: res.format, account: sf.account || res.account,
+      text: sf.text, rows: rows, mapping: map, signature: res.signature || "", delimiter: res.delimiter || ",",
+      currency: res.currency || null, raw: res.txns, skipped: res.skipped, issues: [], saved: true
+    });
+  }
+
   /* ── Wiring ──────────────────────────────────────────────────────── */
   function wire() {
+    // A save still waiting on its timer is made before the page goes away,
+    // so a statement dropped in just before closing the tab is kept.
+    var flush = function () { if (saveTimer) saveNow(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") flush(); });
+    window.addEventListener("storage", function (e) {
+      if (e.key !== STORE_KEY && e.key !== null) return;
+      lastSaved = null;
+      if (e.key === STORE_KEY) adoptStore();
+      // Another page on this site cleared all of its storage: put ours back.
+      else saveNow();
+    });
     var input = $("file-input");
     function pick() { input.value = ""; input.click(); }
     input.addEventListener("change", function () { importFiles(input.files); });
@@ -2149,7 +2223,7 @@
       state.prefs.remember = this.checked;
       saveNow();
       renderFoot();
-      toast(this.checked ? "Your statements will be kept on this device until you clear them." : "Your statements won't be kept after this tab closes.");
+      toast(this.checked ? "Your statements will be kept in this browser until you clear them." : "Your statements are no longer kept in this browser, and will be gone after this tab closes.");
     });
     $("menu-export").addEventListener("click", function () {
       closeMenu();
@@ -2178,7 +2252,9 @@
       state.overrides = {};
       state.layouts = {};
       state.undo = [];
-      state.prefs = { gran: "month", mode: "bars", hidden: {}, currency: "", remember: false, account: "", preset: "" };
+      state.prefs = { gran: "month", mode: "bars", hidden: {}, currency: "", remember: true, account: "", preset: "" };
+      unkept = {};
+      lastSaved = null;
       state.view.range = null;
       render();
       try { localStorage.removeItem(STORE_KEY); } catch (e) { /* nothing stored */ }
@@ -2274,6 +2350,7 @@
             sign: f.sign || null, checks: f.pdf ? f.pdf.checks.map(function (c) { return c.ok; }) : null };
         }),
         count: state.all.length,
+        remember: state.prefs.remember,
         currency: currency,
         range: state.view.range && { from: F.isoOf(state.view.range.from), to: F.isoOf(state.view.range.to) },
         preset: state.view.preset,
