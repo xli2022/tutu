@@ -113,6 +113,13 @@
     };
     if (p.remember) {
       data.files = state.files.map(function (f) {
+        // For a PDF, what was read from it: never the file itself.
+        if (f.format === "pdf") {
+          return { id: f.id, name: f.name, account: f.account, pdf: {
+            sign: f.sign, currency: f.currency, kind: f.pdf.kind, checks: f.pdf.checks,
+            txns: f.read.map(function (t) { return [t.date, t.amount, t.desc]; })
+          } };
+        }
         return { name: f.name, text: f.text, account: f.account, mapping: f.format === "csv" || f.format === "tsv" ? f.mapping : null };
       });
     }
@@ -198,35 +205,168 @@
   }
 
   /* ── Files in ────────────────────────────────────────────────────── */
-  function readFile(file) {
+  function readBytes(file) {
     return new Promise(function (resolve, reject) {
       var r = new FileReader();
-      r.onload = function () { resolve(F.decodeBytes(r.result)); };
+      r.onload = function () { resolve(r.result); };
       r.onerror = function () { reject(r.error); };
       r.readAsArrayBuffer(file);
     });
   }
 
-  var batch = null;   // { added, problems, dupFiles, queue }
+  var batch = null;   // { added, files, problems, dupFiles, queue, verified }
 
   function startBatch() {
-    if (!batch) batch = { added: 0, files: 0, problems: [], dupFiles: 0, queue: [] };
+    if (!batch) batch = { added: 0, files: 0, problems: [], dupFiles: 0, queue: [], verified: 0 };
     return batch;
   }
+
+  // One import at a time: a PDF may stop to ask for its password, and the
+  // review dialog shows one file at a time.
+  var importing = Promise.resolve();
 
   function importFiles(list) {
     var files = [].slice.call(list || []);
     if (!files.length) return;
-    startBatch();
-    Promise.all(files.map(function (f) {
-      if (f.size > MAX_FILE) return { name: f.name, error: "is too big to read here (25 MB at most)" };
-      return readFile(f).then(
-        function (text) { return { name: f.name, text: text }; },
-        function () { return { name: f.name, error: "couldn't be read" }; }
-      );
-    })).then(function (items) {
-      items.forEach(ingest);
-      continueBatch();
+    importing = importing.then(function () {
+      startBatch();
+      return Promise.all(files.map(function (f) {
+        if (f.size > MAX_FILE) return { name: f.name, error: "is too big to read here (25 MB at most)" };
+        return readBytes(f).then(
+          function (buf) {
+            var pdf = kit.pdf ? kit.pdf.isPdf(buf) : /^%PDF-/.test(F.decodeBytes(buf.slice(0, 5)));
+            return pdf ? { name: f.name, bytes: buf } : { name: f.name, text: F.decodeBytes(buf) };
+          },
+          function () { return { name: f.name, error: "couldn't be read" }; }
+        );
+      })).then(function (items) {
+        // Exports are read at once; PDFs one after another.
+        items.forEach(function (it) { if (!it.bytes) ingest(it); });
+        return items.reduce(function (chain, it) {
+          return it.bytes ? chain.then(function () { return readPdf(it); }) : chain;
+        }, Promise.resolve());
+      }).then(function () {
+        // A file under review finishes the batch when its dialog closes.
+        if (!$("dlg-map").open) continueBatch();
+      });
+    }).then(null, function () {
+      batch = null;
+      toast("Something went wrong while reading those files.");
+    });
+  }
+
+  /* PDFs: pdf.js pulls the positioned text out (asking for the password
+     of a locked file), then kit.pdf finds the statement in it. The file
+     itself is let go once read. */
+  function readPdf(item) {
+    var b = startBatch();
+    if (!kit.pdf) {
+      b.problems.push(item.name + " is a PDF, and this browser is too old to read PDFs here.");
+      return Promise.resolve();
+    }
+    toast("Reading " + item.name + "…", null, null, 120000);
+    return openPdf(item.bytes, item.name, null).then(function (out) {
+      if (!out) { b.problems.push(item.name + " was skipped."); return; }
+      ingestPdf(item.name, kit.pdf.parse(out.pages, { name: item.name }), out);
+    }, function (err) {
+      b.problems.push(pdfProblem(item.name, err));
+    }).then(function () { $("toast").hidden = true; });
+  }
+
+  function openPdf(bytes, name, password) {
+    return kit.pdf.extract(bytes, password).then(function (out) {
+      closePassword();
+      return out;
+    }, function (err) {
+      var why = kit.pdf.passwordProblem(err);
+      if (!why) { closePassword(); throw err; }
+      return askPassword(name, why === "wrong").then(function (pw) {
+        return pw == null ? null : openPdf(bytes, name, pw);
+      });
+    });
+  }
+
+  var passWait = null;
+
+  // The dialog stays open while a password is tried, so a wrong one only
+  // brings up the hint.
+  function askPassword(name, wrong) {
+    return new Promise(function (resolve) {
+      passWait = resolve;
+      $("toast").hidden = true;
+      $("pass-intro").textContent = name + " is protected with a password. Type it to read the statement here. " +
+        "It is used only to open this file, and isn't kept.";
+      $("pass-wrong").hidden = !wrong;
+      passBusy(false);
+      $("pass-input").value = "";
+      var dlg = $("dlg-pass");
+      if (!dlg.open) dlg.showModal();
+      $("pass-input").focus();
+    });
+  }
+
+  function answerPassword(pw) {
+    var done = passWait;
+    if (!done) return;
+    passWait = null;
+    $("pass-input").value = "";
+    if (pw == null) closePassword();
+    else passBusy(true);
+    done(pw);
+  }
+
+  function passBusy(on) {
+    $("pass-input").disabled = on;
+    $("pass-ok").disabled = on;
+    $("pass-ok").textContent = on ? "Opening…" : "Open";
+    if (on) $("pass-wrong").hidden = true;
+  }
+
+  function closePassword() {
+    passBusy(false);
+    if ($("dlg-pass").open) $("dlg-pass").close();
+  }
+
+  function pdfProblem(name, err) {
+    if (err && err.name === "PdfReaderError") {
+      return location.protocol === "file:"
+        ? name + " is a PDF, and PDFs can only be read when Spendscape is opened from a web address, not from a file on this computer."
+        : name + " is a PDF, and the PDF reader couldn't be loaded. Check your connection and try again.";
+    }
+    return name + " couldn't be read as a PDF" + (err && /invalid|corrupt|damaged|xref|missing pdf/i.test(String(err.name) + " " + String(err.message)) ? ": the file looks damaged" : "") + ".";
+  }
+
+  function ingestPdf(name, res, out) {
+    var b = startBatch();
+    if (!res.txns.length) {
+      b.problems.push(res.issues.indexOf("no-text") >= 0
+        ? name + " has no text in it (it looks like a scan or a photo), so there is nothing to read. The PDF statements on your bank's website have text, and so do CSV exports."
+        : "No transactions were found in " + name + ".");
+      return;
+    }
+    var id = "f" + hash(out.pages.map(function (p) { return p.items.map(function (i) { return i.str; }).join(" "); }).join("\n"));
+    var known = state.files.some(function (f) { return f.id === id; }) || b.queue.some(function (f) { return f.id === id; });
+    if (known) { b.dupFiles++; return; }
+    var issues = res.issues.slice();
+    if (out.truncated) issues.push("truncated");
+    var file = {
+      id: id, name: name, format: "pdf", account: res.account, text: null, rows: null, mapping: null,
+      signature: "", delimiter: ",", currency: res.currency || null,
+      read: res.txns, sign: "asis", raw: res.txns, skipped: res.skipped, issues: issues,
+      pdf: { kind: res.pdf.kind, period: res.pdf.period, checks: res.pdf.checks }
+    };
+    // A statement that adds up goes straight in; one with doubts gets a look.
+    if (issues.length) b.queue.push(file);
+    else {
+      addFile(file);
+      if (file.pdf.checks.length) b.verified++;
+    }
+  }
+
+  function withSign(txns, sign) {
+    if (sign !== "flip") return txns;
+    return txns.map(function (t) {
+      return { date: t.date, amount: -t.amount, desc: t.desc, memo: t.memo, bankCat: t.bankCat, account: t.account };
     });
   }
 
@@ -242,8 +382,8 @@
     }
     if (res.issues.indexOf("unsupported") >= 0) {
       b.problems.push(res.format === "pdf"
-        ? item.name + " is a PDF. Download a CSV, OFX or QIF export from your bank instead."
-        : item.name + " isn't a format Spendscape can read. Try CSV, OFX, QFX or QIF.");
+        ? item.name + " is the text of a PDF. Drop the PDF file itself instead."
+        : item.name + " isn't a format Spendscape can read. Try PDF, CSV, OFX, QFX or QIF.");
       return;
     }
     var id = "f" + hash(item.text);
@@ -285,7 +425,9 @@
   function continueBatch() {
     if (!batch) return;
     if (batch.queue.length) {
-      openMapping(batch.queue.shift(), false);
+      var next = batch.queue.shift();
+      if (next.format === "pdf") openPdfReview(next, false);
+      else openMapping(next, false);
       return;
     }
     var b = batch;
@@ -304,6 +446,7 @@
       var skipped = b.added - gained;
       if (skipped > 0) msg.push(skipped.toLocaleString() + " already-imported duplicates were skipped.");
     }
+    if (b.verified) msg.push(b.verified === 1 ? "The statement's own totals check out." : "All " + b.verified + " statements' own totals check out.");
     if (b.dupFiles) msg.push(b.dupFiles === 1 ? "That file is already in." : b.dupFiles + " files were already in.");
     msg = msg.concat(b.problems);
     if (msg.length) toast(msg.join(" "), null, null, b.problems.length ? 8000 : 4200);
@@ -1409,11 +1552,20 @@
   }
 
   /* ── Column mapping dialog ───────────────────────────────────────── */
-  var mapping = { file: null, map: null, existing: false };
+  var mapping = { file: null, map: null, existing: false, pdf: false, sign: "asis" };
   var MAP_ROLES = ["date", "desc", "memo", "amount", "type", "debit", "credit", "category"];
   var OPTIONAL = { memo: 1, type: 1, category: 1 };
 
+  // The review dialog serves both spreadsheets (columns to pick) and PDFs
+  // (totals checked, signs to confirm).
+  function setReviewMode(pdf) {
+    mapping.pdf = pdf;
+    $("pdf-review").hidden = !pdf;
+    document.querySelector("#dlg-map .map-grid").hidden = pdf;
+  }
+
   function openMapping(file, existing) {
+    setReviewMode(false);
     mapping.file = file;
     mapping.existing = existing;
     mapping.map = JSON.parse(JSON.stringify(file.mapping));
@@ -1478,8 +1630,11 @@
   }
 
   function previewMapping() {
-    var file = mapping.file, map = mapping.map;
-    var res = F.applyMapping(file.rows, map);
+    var res = F.applyMapping(mapping.file.rows, mapping.map);
+    showPreview(res);
+  }
+
+  function showPreview(res) {
     var host = $("map-preview");
     clear(host);
     var head = el("tr", null, el("thead", null, host));
@@ -1570,7 +1725,83 @@
     return out;
   }
 
+  var PDF_SAY = {
+    "totals": "Some totals printed on the statement don't match what was read, so a row may be missing or misread. The checks are below.",
+    "sign": "Spendscape had to guess which amounts are money in. Check that purchases show as money out.",
+    "year": "The statement doesn't say which year it covers, so its dates are placed in the most recent one.",
+    "truncated": "Only the first 80 pages were read."
+  };
+
+  function openPdfReview(file, existing) {
+    setReviewMode(true);
+    mapping.file = file;
+    mapping.existing = existing;
+    mapping.sign = file.sign || "asis";
+    var info = file.pdf || {}, period = info.period && info.period.how === "range" ? info.period : null;
+    $("map-title").textContent = existing ? "How " + file.name + " was read" : "Check " + file.name;
+    $("map-intro").textContent = (info.kind === "card" ? "Read as a card statement" : info.kind === "bank" ? "Read as a bank statement" : "Read from the PDF") +
+      (period ? ", " + A.formatDay(period.from) + " to " + A.formatDay(period.to) : "") +
+      ". Make sure the preview looks right: spending should show as money out.";
+    var notes = $("map-notes");
+    clear(notes);
+    (existing ? [] : file.issues).forEach(function (i) { if (PDF_SAY[i]) el("li", null, notes, PDF_SAY[i]); });
+    var list = $("pdf-checks");
+    clear(list);
+    (info.checks || []).forEach(function (c) {
+      var li = el("li", c.ok ? "is-ok" : "is-off", list);
+      el("span", "mark", li, c.ok ? "✓" : "!").setAttribute("aria-label", c.ok ? "matches" : "doesn't match");
+      el("span", null, li, checkText(c, file.currency));
+    });
+    list.hidden = !list.childNodes.length;
+    $("map-remember").parentNode.hidden = true;
+    syncPdfSign();
+    var dlg = $("dlg-map");
+    if (!dlg.open) dlg.showModal();
+  }
+
+  function checkText(c, cur) {
+    var fmt = function (v) {
+      try { return new Intl.NumberFormat(undefined, { style: "currency", currency: cur || currency }).format(v); } catch (e) { return v.toFixed(2); }
+    };
+    var label = /[a-z]/.test(c.label) ? c.label : c.label.charAt(0) + c.label.slice(1).toLowerCase();
+    if (c.kind === "balance") {
+      return "Opening balance and these transactions come to the closing balance of " + fmt(c.expected) + (c.ok ? "" : ", but what was read comes to " + fmt(c.got));
+    }
+    if (c.kind === "columns") {
+      var e = c.expected, g = c.got;
+      return "Column totals: " + (e["in"] != null ? fmt(e["in"]) + " in" : "") + (e["in"] != null && e.out != null ? ", " : "") + (e.out != null ? fmt(e.out) + " out" : "") +
+        (c.ok ? "" : ", but what was read comes to " + fmt(g["in"]) + " in, " + fmt(g.out) + " out");
+    }
+    return label + ": " + fmt(c.expected) + (c.ok ? "" : ", but what was read comes to " + fmt(c.got));
+  }
+
+  function syncPdfSign() {
+    [].forEach.call($("pdf-sign").querySelectorAll("button"), function (b) {
+      b.setAttribute("aria-checked", b.getAttribute("data-sign") === mapping.sign ? "true" : "false");
+    });
+    showPreview({ txns: withSign(mapping.file.read, mapping.sign), skipped: mapping.file.skipped });
+  }
+
+  function acceptPdf() {
+    var file = mapping.file;
+    file.sign = mapping.sign;
+    file.raw = withSign(file.read, file.sign);
+    $("dlg-map").close("ok");
+    if (mapping.existing) {
+      rebuild();
+      clampView();
+      render(true);
+      renderFiles();
+      toast("Updated " + file.name + ".");
+    } else {
+      startBatch();
+      addFile(file);
+      continueBatch();
+    }
+  }
+
   function acceptMapping() {
+    if (mapping.pdf) { acceptPdf(); return; }
     var file = mapping.file, map = mapping.map, res = mapping.result;
     if (!res || !res.txns.length) return;
     file.mapping = map;
@@ -1628,6 +1859,10 @@
         var cols = el("button", "tool", actions, "Columns");
         cols.type = "button";
         cols.addEventListener("click", function () { openMapping(f, true); });
+      } else if (f.format === "pdf") {
+        var look = el("button", "tool", actions, "Review");
+        look.type = "button";
+        look.addEventListener("click", function () { openPdfReview(f, true); });
       }
       var rm = el("button", "tool", actions, "Remove");
       rm.type = "button";
@@ -1643,7 +1878,8 @@
       f.raw.forEach(function (t) { if (t.date < lo) lo = t.date; if (t.date > hi) hi = t.date; });
       el("p", "file-meta", li, f.name + " · " + f.raw.length.toLocaleString() + " transactions" +
         (f.raw.length ? " · " + A.formatDay(lo) + " – " + A.formatDay(hi) : "") +
-        (f.skipped ? " · " + f.skipped + " rows skipped" : ""));
+        (f.skipped ? " · " + f.skipped + " rows skipped" : "") +
+        (f.pdf && f.pdf.checks.length ? (f.pdf.checks.every(function (c) { return c.ok; }) ? " · totals check out" : " · totals differ") : ""));
     });
   }
 
@@ -1731,6 +1967,16 @@
     state.prefs.remember = !!p.remember;
     if (!state.prefs.remember || !s.files || !s.files.length) return;
     s.files.forEach(function (sf) {
+      if (sf.pdf) {
+        var read = (sf.pdf.txns || []).map(function (r) { return { date: r[0], amount: r[1], desc: r[2], memo: "", bankCat: "", account: "" }; });
+        state.files.push({
+          id: sf.id || "f" + hash(JSON.stringify(sf.pdf.txns)), name: sf.name, format: "pdf", account: sf.account,
+          text: null, rows: null, mapping: null, signature: "", delimiter: ",", currency: sf.pdf.currency || null,
+          read: read, sign: sf.pdf.sign || "asis", raw: withSign(read, sf.pdf.sign), skipped: 0, issues: [],
+          pdf: { kind: sf.pdf.kind || "unknown", period: null, checks: sf.pdf.checks || [] }
+        });
+        return;
+      }
       var res, rows = null, map = sf.mapping;
       if (map) {
         var delim = F.detectDelimiter(sf.text);
@@ -1962,6 +2208,22 @@
       var b = e.target.closest("button");
       if (b) setAmountKind(b.getAttribute("data-kind"));
     });
+    $("pdf-sign").addEventListener("click", function (e) {
+      var b = e.target.closest("button");
+      if (!b) return;
+      mapping.sign = b.getAttribute("data-sign");
+      syncPdfSign();
+    });
+    radioKeys($("pdf-sign"));
+    $("pass-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var pw = $("pass-input").value;
+      if (pw) answerPassword(pw);
+      else $("pass-input").focus();
+    });
+    $("pass-skip").addEventListener("click", function () { answerPassword(null); });
+    $("dlg-pass").addEventListener("cancel", function (e) { e.preventDefault(); answerPassword(null); });
+    $("dlg-pass").querySelector(".sheet-x").addEventListener("submit", function (e) { e.preventDefault(); answerPassword(null); });
     $("map-ok").addEventListener("click", acceptMapping);
     $("map-cancel").addEventListener("click", skipMapping);
     $("dlg-map").addEventListener("cancel", function (e) { e.preventDefault(); skipMapping(); });
@@ -2007,7 +2269,10 @@
   window.Spendscape = {
     state: function () {
       return {
-        files: state.files.map(function (f) { return { name: f.name, format: f.format, account: f.account, count: f.raw.length, mapping: f.mapping }; }),
+        files: state.files.map(function (f) {
+          return { name: f.name, format: f.format, account: f.account, count: f.raw.length, mapping: f.mapping,
+            sign: f.sign || null, checks: f.pdf ? f.pdf.checks.map(function (c) { return c.ok; }) : null };
+        }),
         count: state.all.length,
         currency: currency,
         range: state.view.range && { from: F.isoOf(state.view.range.from), to: F.isoOf(state.view.range.to) },

@@ -24,11 +24,17 @@ apps/
   spendscape/
     index.html  spendscape.css  spendscape.js   # page, styles, state + wiring
     formats.js  categories.js  analysis.js      # parsing, categorising, numbers
+    pdfstatement.js                             # reading PDF statements
     charts.js   sample.js                       # SVG charts, demo statements
+    vendor/pdfjs/                               # Mozilla pdf.js, unmodified
 ```
 
-No build step, no dependencies, no external requests — plain static files that
-also work opened straight from disk.
+No build step and no external requests: plain static files. The one
+third-party piece is Mozilla's [pdf.js](https://mozilla.github.io/pdf.js/),
+vendored unmodified in `apps/spendscape/vendor/pdfjs/` (see its README for
+version and checksums) and loaded only when someone opens a PDF. Everything
+also works opened straight from disk, except reading PDFs: browsers don't load
+JavaScript modules from `file://`, so that needs the page served over http(s).
 
 ## Adding an app
 
@@ -122,10 +128,15 @@ searchable transaction list where any transaction can be re-filed.
 accounts.
 
 **Nothing leaves the browser.** Files are read with `FileReader` and parsed in
-the page; there are no network requests. `localStorage` keeps only the user's
-category changes, any column layouts they fixed, and display preferences. The
-statements themselves are kept only if the user ticks *Remember my statements
-on this device*, and *Clear everything* wipes it all.
+the page; there are no network requests. PDFs are opened by the vendored pdf.js
+in a worker served from the same site, given the file's bytes directly, with
+code evaluation and every fetch it could make (fonts, character maps,
+WebAssembly, colour profiles) switched off; a locked PDF's password is used to
+open it and is not kept. `localStorage` keeps only the user's category changes,
+any column layouts they fixed, and display preferences. The statements
+themselves are kept only if the user ticks *Remember my statements on this
+device* (for a PDF, the transactions read from it, never the file), and *Clear
+everything* wipes it all.
 
 #### Reading statements
 
@@ -152,9 +163,45 @@ with `amount` signed from the account holder's side (negative is money out).
 When a spreadsheet leaves real doubt (an unsettled date order, guessed signs,
 a missing column) the user gets a short review dialog with a live preview and a
 count of money in and out. A layout fixed there is remembered by its header
-row, so that bank's next export goes straight in. PDFs are refused with a
-pointer to the CSV/OFX/QIF downloads: they are laid out for printing, and
-reading them would mean shipping a PDF engine.
+row, so that bank's next export goes straight in.
+
+#### PDF statements
+
+A PDF is laid out for printing, so `pdfstatement.js` reads it from where the
+words sit rather than from any one bank's format. pdf.js supplies each page's
+text with positions; `parse()` (pure, so it is tested in Node) does the rest:
+
+- **Lines and cells**: text is grouped into lines by height and into cells by
+  the gaps between words. Whole lines printed as one run padded with spaces
+  (typewriter-style statements) are cut at the padding, and an amount crowded
+  by a long description is still split off.
+- **Column headings** are found by their words ("Trans Date", "Withdrawals/
+  Subtractions", "Money in (£)", "Balance"...), including headings stacked over
+  two or three lines and tables printed two or three times side by side. A
+  row's date must sit in a date column, and its amounts are placed by column.
+- **Sections** ("Payments", "Other Credits", "Checks Paid", "Purchases, Balance
+  Transfers & Other Charges"...) give the direction when the columns don't;
+  summaries, daily balances, interest calculations, year-to-date totals and
+  notices are skipped. "(continued)" titles carry a section, and its printed
+  total, across a page break.
+- **Signs**: in/out columns, `CR`/`DR`, printed minus signs (which mean opposite
+  things on a card and a bank statement), sections, type columns, and a
+  running balance, which settles any direction that was only a guess.
+- **Dates and years**: day-first or month-first comes from the statement
+  period if only one reading makes sense, then from the row dates; rows
+  printed without a year take it from the statement period, so a January
+  statement's December rows land in the year before.
+- **Noise**: running heads and feet repeated on every page are ignored, a row
+  needs words as well as a date and an amount, rows dated outside the
+  statement period (a payment due date, an offer's end date) are dropped, and
+  a row with no column headings or section to vouch for it must line up with
+  other rows. Undated interest and fee lines take the closing date.
+- **Checks**: every "Total ..." line the statement prints and its opening and
+  closing balances are compared with what was read. A statement that adds up
+  goes straight in; one that doesn't, or whose signs had to be guessed, gets
+  the review dialog with the checks listed, a live preview and a switch to
+  swap money in and out. Locked PDFs ask for their password; scans (no text)
+  and non-statements are reported rather than half-read.
 
 Re-importing overlapping statements adds only what is new: a transaction's id
 is its date, amount and description plus how many times that trio already

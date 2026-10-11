@@ -76,7 +76,7 @@
           <p class="dz-title">Drop your statements here</p>
           <p class="dz-sub" id="dz-sub">or <span class="dz-link">choose files</span>. Add as many months and accounts as you like.</p>
           <ul class="dz-formats" aria-label="Supported formats">
-            <li>CSV</li><li>OFX</li><li>QFX</li><li>QIF</li><li>TSV</li>
+            <li>PDF</li><li>CSV</li><li>OFX</li><li>QFX</li><li>QIF</li><li>TSV</li>
           </ul>
         </div>
 
@@ -95,14 +95,16 @@
           <summary>Where do I find a statement file?</summary>
           <div class="howto-body">
             <p>
-              Sign in to your bank's website and open an account's activity or statements page.
-              Look for <strong>Download</strong> or <strong>Export</strong>, pick a date range, and choose
-              <strong>CSV</strong> (sometimes called "Excel" or "spreadsheet"), <strong>QFX/OFX</strong>
-              ("Quicken" or "Money") or <strong>QIF</strong>.
+              Sign in to your bank's website and open an account's <strong>Statements</strong> page:
+              the monthly <strong>PDF</strong> statements there can be dropped in as they are. For any
+              date range, look for <strong>Download</strong> or <strong>Export</strong> on the activity page
+              and choose <strong>CSV</strong> (sometimes called "Excel" or "spreadsheet"),
+              <strong>QFX/OFX</strong> ("Quicken" or "Money") or <strong>QIF</strong>.
             </p>
             <p>
-              PDF statements can't be read here: they are laid out for printing, not for computers.
-              Most banks offer one of the formats above right next to the PDF.
+              PDFs are read from where the words sit on the page, then checked against the totals and
+              balances the statement prints. Statements your bank emails or lets you download work; scans
+              and photos of paper statements have no text to read.
             </p>
             <p>
               Any spreadsheet with a date, a description and an amount column works too, with the columns
@@ -358,6 +360,16 @@
       <h2 class="sheet-title" id="map-title">Check this file</h2>
       <p class="sheet-text" id="map-intro"></p>
       <ul class="map-notes" id="map-notes"></ul>
+      <div class="pdf-review" id="pdf-review" hidden>
+        <ul class="pdf-checks" id="pdf-checks" aria-label="Checked against the statement"></ul>
+        <fieldset class="field">
+          <legend>Money in and money out</legend>
+          <div class="seg seg-sm" id="pdf-sign" role="radiogroup">
+            <button type="button" role="radio" data-sign="asis">As read</button>
+            <button type="button" role="radio" data-sign="flip">Swapped</button>
+          </div>
+        </fieldset>
+      </div>
       <div class="map-grid">
         <label class="field"><span>Date</span><select id="map-date"></select></label>
         <label class="field"><span>Date order</span>
@@ -407,6 +419,22 @@
       </div>
     </dialog>
 
+    <!-- ── PDF password ────────────────────────────────────────────────── -->
+    <dialog class="sheet" id="dlg-pass" aria-labelledby="pass-title">
+      <form method="dialog" class="sheet-x"><button aria-label="Close" value="cancel">&#10005;</button></form>
+      <h2 class="sheet-title" id="pass-title">This PDF is locked</h2>
+      <p class="sheet-text" id="pass-intro"></p>
+      <form id="pass-form" autocomplete="off">
+        <label class="field"><span>Password</span><input type="password" id="pass-input" autocomplete="off" spellcheck="false" /></label>
+        <p class="pass-wrong" id="pass-wrong" role="alert" hidden>That password didn't open it. Try again.</p>
+        <div class="sheet-actions sheet-actions-row">
+          <span class="spacer"></span>
+          <button class="btn btn-ghost" type="button" id="pass-skip">Skip this file</button>
+          <button class="btn btn-pink" type="submit" id="pass-ok">Open</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- ── Paste ───────────────────────────────────────────────────────── -->
     <dialog class="sheet sheet-wide" id="dlg-paste" aria-labelledby="paste-title">
       <form method="dialog" class="sheet-x"><button aria-label="Close">&#10005;</button></form>
@@ -429,13 +457,14 @@
     </div>
 
     <input type="file" id="file-input" multiple hidden
-           accept=".csv,.tsv,.txt,.ofx,.qfx,.qif,.qbo,text/csv,text/tab-separated-values,text/plain,application/x-ofx" />
+           accept=".pdf,.csv,.tsv,.txt,.ofx,.qfx,.qif,.qbo,application/pdf,text/csv,text/tab-separated-values,text/plain,application/x-ofx" />
 
     <script src="formats.js"></script>
     <script src="categories.js"></script>
     <script src="analysis.js"></script>
     <script src="charts.js"></script>
     <script src="sample.js"></script>
+    <script src="pdfstatement.js"></script>
     <script src="spendscape.js"></script>
   </body>
 </html>

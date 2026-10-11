@@ -1143,6 +1143,44 @@ button.insight:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 }
 #paste-text:focus { outline: none; box-shadow: inset 0 0 0 2px #fff; }
 
+/* PDF review: what the statement's own totals said, and a way to swap
+   money in and out if a statement printed its signs the other way. */
+.pdf-review { display: grid; gap: .9rem; margin: 0 0 .2rem; }
+.pdf-review[hidden], .map-grid[hidden] { display: none; }
+.pdf-review .seg { justify-self: start; }
+.pdf-checks { display: grid; gap: .3rem; margin: 0; padding: 0; list-style: none; }
+.pdf-checks[hidden] { display: none; }
+.pdf-checks li { display: flex; gap: .5rem; align-items: baseline; font-size: .86rem; color: var(--ink-2); line-height: 1.4; }
+.pdf-checks .mark {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  font-size: .72rem;
+  font-weight: 800;
+  transform: translateY(.1rem);
+}
+.pdf-checks .is-ok .mark { background: rgba(159,240,138,.2); color: #9ff08a; }
+.pdf-checks .is-off .mark { background: rgba(255,138,155,.2); color: #ff8a9b; }
+.pdf-checks .is-off { color: #ffd2d9; }
+
+#pass-input {
+  width: 100%;
+  padding: .6rem .85rem;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0,0,0,.3);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.14);
+  color: var(--ink);
+  font: inherit;
+  font-size: .95rem;
+}
+#pass-input:focus { outline: none; box-shadow: inset 0 0 0 2px #fff; }
+.pass-wrong { margin: .6rem 0 0; color: #ffb3c0; font-size: .86rem; font-weight: 600; }
+#dlg-pass .sheet-actions { margin-top: 1.1rem; }
+
 /* ── Drop overlay ─────────────────────────────────────────────────── */
 .drop-overlay {
   position: fixed;

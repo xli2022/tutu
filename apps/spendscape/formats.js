@@ -1019,6 +1019,8 @@
     dayOf: dayOf,
     ymd: ymd,
     isoOf: isoOf,
+    accountFromName: accountFromName,
+    currencyIn: currencyIn,
     ROLES: ROLES
   };
 })(window.SpendscapeKit = window.SpendscapeKit || {});
