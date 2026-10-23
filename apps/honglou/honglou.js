@@ -243,7 +243,7 @@
     } else if (autoOn) {
       var n = reveal.cmd ? Array.from(reveal.cmd.text).length : 10;
       var k = 1.7 - store.settings.auto / 100 * 1.3;
-      reveal.timer = setTimeout(advance, (900 + n * 75) * k);
+      reveal.timer = setTimeout(advance, (700 + n * 50) * k);
     }
   }
 
