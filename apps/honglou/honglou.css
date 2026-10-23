@@ -122,6 +122,8 @@ button { font: inherit; color: inherit; }
 .figures { z-index: 1; will-change: transform; }
 .scene-back { z-index: 0; }
 .scene-front { z-index: 2; }
+.scene-glow { z-index: 5; mix-blend-mode: screen; pointer-events: none; }
+.layer-glow { filter: none; }
 
 .fig {
   position: absolute;
@@ -145,6 +147,16 @@ button { font: inherit; color: inherit; }
 @keyframes sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
 @keyframes sway-slow { from { transform: rotate(-.8deg); } to { transform: rotate(.8deg); } }
 @keyframes shimmer { from { transform: translateX(-10px); opacity: .7; } to { transform: translateX(10px); opacity: 1; } }
+.twinkle { animation: twinkle 3.2s ease-in-out infinite alternate; }
+.drift { animation: drift 26s ease-in-out infinite alternate; }
+.flicker { animation: flicker 2.6s ease-in-out infinite; }
+.flame { animation: flame .9s ease-in-out infinite alternate; }
+.pulse { animation: pulse 3.4s ease-in-out infinite; }
+@keyframes twinkle { from { opacity: .15; } to { opacity: .95; } }
+@keyframes drift { from { transform: translateX(-40px); } to { transform: translateX(40px); } }
+@keyframes flicker { 0%, 100% { opacity: 1; } 30% { opacity: .82; } 55% { opacity: .95; } 70% { opacity: .78; } }
+@keyframes flame { from { transform: scale(1, 1) rotate(-2deg); } to { transform: scale(.92, 1.08) rotate(2deg); } }
+@keyframes pulse { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
 
 .fx, .ink { position: absolute; left: 0; top: 0; width: 1600px; height: 900px; pointer-events: none; }
 .fx { z-index: 3; }
@@ -155,9 +167,9 @@ button { font: inherit; color: inherit; }
 .tint-rain { background: linear-gradient(180deg, rgba(60, 74, 90, .3), rgba(40, 46, 58, .22)); mix-blend-mode: multiply; }
 .tint-snow { background: linear-gradient(180deg, rgba(200, 214, 230, .12), rgba(120, 130, 150, .1)); }
 .tint-candle { background: radial-gradient(900px 640px at 34% 60%, rgba(255, 190, 110, .12), rgba(20, 10, 30, .5)); mix-blend-mode: multiply; }
-.grain { position: absolute; inset: 0; z-index: 5; pointer-events: none; mix-blend-mode: soft-light; opacity: .95; }
+.grain { position: absolute; inset: 0; z-index: 6; pointer-events: none; mix-blend-mode: soft-light; opacity: .95; }
 .vignette {
-  position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  position: absolute; inset: 0; z-index: 7; pointer-events: none;
   background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 58%, rgba(58, 34, 16, .32) 100%);
 }
 .is-dream .vignette { background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 50%, rgba(4, 8, 24, .55) 100%); }

@@ -44,6 +44,7 @@
     els.fx.className = "fx";
     els.stage.appendChild(els.fx);
     els.tint = div("tint", els.stage);
+    els.glow = div("scene scene-glow", els.stage);
     els.grain = div("grain", els.stage);
     els.grain.style.backgroundImage = "url(" + P.paperURL(512, 7, 1) + ")";
     els.vignette = div("vignette", els.stage);
@@ -103,11 +104,11 @@
     if (!sc) return null;
     var made = [];
     sc.layers.forEach(function (l, i) {
-      var el = div("layer" + (l.front ? " layer-front" : ""), l.front ? els.front : els.back);
+      var el = div("layer" + (l.front ? " layer-front" : "") + (l.glow ? " layer-glow" : ""), l.glow ? els.glow : l.front ? els.front : els.back);
       el.style.setProperty("--shadow", (4 + l.depth * 14).toFixed(1) + "px");
       el.style.zIndex = i;
       el.innerHTML = l.svg;
-      made.push({ el: el, depth: l.depth, front: !!l.front });
+      made.push({ el: el, depth: l.depth, front: !!l.front, glow: !!l.glow });
     });
     sc.layersMade = made;
     return sc;
@@ -447,6 +448,47 @@
         x.beginPath(); x.arc(p.x, p.y, p.ash ? 2.4 : 1.6, 0, 6.3); x.fill();
       }
     },
+    butterflies: {
+      n: 2,
+      spawn: function (p, fresh) {
+        p.x = fresh ? 300 + Math.random() * 500 : -40; p.y = 300 + Math.random() * 300;
+        p.vx = 30 + Math.random() * 25; p.ph = Math.random() * 6.3; p.r = 15 + Math.random() * 4;
+      },
+      step: function (p, dt, t) { p.x += p.vx * dt; p.y += Math.sin(t / 700 + p.ph) * 40 * dt; return p.x < W + 60; },
+      draw: function (x, p, t) {
+        var flap = Math.abs(Math.sin(t / 110 + p.ph));
+        x.save(); x.translate(p.x, p.y); x.rotate(Math.sin(t / 900 + p.ph) * 0.3);
+        x.fillStyle = "rgba(214,232,214,.92)"; x.strokeStyle = "rgba(90,120,100,.7)"; x.lineWidth = 1;
+        [-1, 1].forEach(function (side) {
+          x.save(); x.scale(side * (0.25 + flap * 0.75), 1);
+          x.beginPath(); x.moveTo(0, 0);
+          x.bezierCurveTo(p.r * 0.4, -p.r * 1.1, p.r * 1.3, -p.r * 0.9, p.r * 0.9, -p.r * 0.1);
+          x.bezierCurveTo(p.r * 1.1, p.r * 0.5, p.r * 0.5, p.r * 0.9, 0, p.r * 0.2);
+          x.fill(); x.stroke(); x.restore();
+        });
+        x.fillStyle = "#4a4a3a"; x.fillRect(-1.2, -p.r * 0.5, 2.4, p.r * 0.9);
+        x.restore();
+      }
+    },
+    // One crane, flushed from the reeds, flies up across the moon and away.
+    crane: {
+      n: 1, once: true,
+      spawn: function (p) { p.x = 380; p.y = 700; p.t = 0; },
+      step: function (p, dt) { p.t += dt; p.x += 190 * dt; p.y -= (150 - p.t * 22) * dt; return p.x < W + 120; },
+      draw: function (x, p, t) {
+        var flap = Math.sin(t / 160);
+        x.save(); x.translate(p.x, p.y); x.rotate(-0.25);
+        x.fillStyle = "rgba(246,244,236,.95)";
+        x.beginPath(); x.ellipse(0, 0, 26, 7, 0, 0, 6.3); x.fill();
+        x.beginPath(); x.moveTo(20, -2); x.lineTo(54, -10); x.lineTo(56, -8); x.lineTo(22, 3); x.fill();
+        x.fillStyle = "#c8372b"; x.beginPath(); x.arc(52, -10, 3, 0, 6.3); x.fill();
+        x.fillStyle = "rgba(246,244,236,.95)";
+        x.beginPath(); x.moveTo(-6, -2); x.quadraticCurveTo(-10, -40 * flap - 6, -40, -60 * flap - 4); x.quadraticCurveTo(-26, -20 * flap, 8, 2); x.fill();
+        x.fillStyle = "#26221f"; x.beginPath(); x.moveTo(-40, -60 * flap - 4); x.lineTo(-30, -44 * flap - 2); x.lineTo(-24, -40 * flap); x.fill();
+        x.strokeStyle = "rgba(60,60,60,.8)"; x.lineWidth = 1.6; x.beginPath(); x.moveTo(-24, 3); x.lineTo(-62, 10); x.stroke();
+        x.restore();
+      }
+    },
     motes: {
       n: 46,
       spawn: function (p, fresh) {
@@ -499,7 +541,7 @@
     for (var i = parts.length - 1; i >= 0; i--) {
       var p = parts[i];
       if (!sys.step(p, dt, t)) {
-        if (parts.length <= fxWant) sys.spawn(p, false); else { parts.splice(i, 1); continue; }
+        if (parts.length <= fxWant && !sys.once) sys.spawn(p, false); else { parts.splice(i, 1); continue; }
       }
       sys.draw(x, p, t);
     }

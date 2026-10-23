@@ -1,332 +1,280 @@
 /* ── 还泪记 · scenes ──────────────────────────────────────────────────────
    Every backdrop is a paper diorama: a few flat layers stacked at different
-   depths, far ones washed in ink and blurred, near ones cut sharp. Each
-   scene is a function returning { layers: [{ depth, svg }], fx } in stage
-   units (1600 × 900, drawn with a 60-unit bleed so the layers can drift
-   for parallax without showing an edge).                                  */
+   depths, far ones washed in ink and blurred, near ones cut sharp. A scene
+   is a function of its variant returning
+     { layers: [{ depth, svg, front?, glow? }], fx, light, dream }
+   in stage units (1600 × 900, drawn with a 60-unit bleed so the layers can
+   drift for parallax without showing an edge).
+
+     front  the layer stands in front of the figures (keep it low or at
+            the edges, never across a face)
+     glow   lamplight, moonlight: laid over the night tint with "screen"
+            so it reads as light rather than paint
+
+   The vertical text page covers the right quarter of the stage, so what
+   matters is composed in the left three quarters.                        */
 (function (kit) {
   "use strict";
 
-  var P = kit.paint;
-  var S = P.spline, path = P.path, g = P.g, tag = P.tag, shade = P.shade, mix = P.mix;
+  var P = kit.paint, X = kit.scenery, B = kit.buildings;
+  var S = P.spline, path = P.path, g = P.g, tag = P.tag, shade = P.shade, n1 = P.n1;
 
   var W = 1600, H = 900, BLEED = 60;
   var VB = (-BLEED) + " " + (-BLEED) + " " + (W + BLEED * 2) + " " + (H + BLEED * 2);
-  var INK = "#24211f";
+  var SCENES = {};
 
-  function layer(depth, defs, body, cls) {
+  function layer(depth, defs, body, opts) {
+    opts = opts || {};
     return {
-      depth: depth,
-      svg: '<svg class="layer-art' + (cls ? " " + cls : "") + '" viewBox="' + VB + '" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      depth: depth, front: !!opts.front, glow: !!opts.glow,
+      svg: '<svg class="layer-art" viewBox="' + VB + '" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
         "<defs>" + defs.join("") + "</defs>" + body + "</svg>"
     };
   }
 
-  function blur(defs, sd) {
-    var fid = P.id("bl");
-    defs.push(tag("filter", { id: fid, x: "-20%", y: "-20%", width: "140%", height: "140%" },
-      tag("feGaussianBlur", { stdDeviation: sd })));
-    return "url(#" + fid + ")";
+  function ground(defs, line, top, bottom) {
+    var last = line[line.length - 1], first = line[0];
+    return path(S(line, false) + "L" + last[0] + " " + (H + BLEED) + "L" + first[0] + " " + (H + BLEED) + "Z",
+      X.grad(defs, 0, 0, 0, 1, [[0, top], [1, bottom]]));
   }
 
-  /* ── Sky, hills, mist ──────────────────────────────────────────────── */
-  function sky(defs, stops) {
-    var gid = P.id("sky");
-    defs.push(P.linear(gid, 0, 0, 0, 1, stops));
-    return tag("rect", { x: -BLEED, y: -BLEED, width: W + BLEED * 2, height: H + BLEED * 2, fill: "url(#" + gid + ")" });
-  }
-
-  // An ink-wash ridge: dark along the crest, fading downward, soft-edged.
-  function hills(defs, o) {
-    var r = P.rng(o.seed);
-    var pts = [], step = 40, x;
-    for (x = -BLEED - 40; x <= W + BLEED + 40; x += step) {
-      var n = P.fbm(x / o.scale, o.seed * 0.37, 4, o.seed);
-      var peak = Math.max(0, P.fbm(x / (o.scale * 0.45), 3.1, 3, o.seed + 9));
-      pts.push([x, o.y - (n * 0.6 + peak * 0.9) * o.amp - r() * 3]);
-    }
-    var d = S(pts, false) + "L" + (W + BLEED + 40) + " " + (o.y + o.depth) + "L" + (-BLEED - 40) + " " + (o.y + o.depth) + "Z";
-    var gid = P.id("hl");
-    defs.push(P.linear(gid, 0, 0, 0, 1, [[0, o.color, o.op], [0.45, o.color, o.op * 0.55], [1, o.color, 0]]));
-    return path(d, "url(#" + gid + ")", { filter: o.blur ? blur(defs, o.blur) : null });
-  }
-
-  function mist(defs, y, h, color, op) {
-    var gid = P.id("ms");
-    defs.push(P.linear(gid, 0, 0, 0, 1, [[0, color, 0], [0.5, color, op], [1, color, 0]]));
-    return tag("rect", { x: -BLEED, y: y - h / 2, width: W + BLEED * 2, height: h, fill: "url(#" + gid + ")" });
-  }
-
-  /* ── Trees and flowers ─────────────────────────────────────────────── */
-
-  // Recursive ink branches. Collects twig tips and joints for blossoms.
-  function branches(o) {
-    var r = P.rng(o.seed), out = [], spots = [];
-    function grow(x, y, ang, len, wid, depth) {
-      var segs = 4, pts = [[x, y]], cx = x, cy = y, a = ang;
-      for (var i = 1; i <= segs; i++) {
-        a += (r() - 0.5) * (o.kink || 0.5);
-        cx += Math.cos(a) * len / segs;
-        cy += Math.sin(a) * len / segs;
-        pts.push([cx, cy]);
-        if (depth < 3) spots.push([cx, cy, depth]);
-      }
-      out.push(path(P.stroke(pts, wid, wid * 0.82, wid * 0.62), o.color || INK));
-      if (depth <= 0 || wid < 1.2) { spots.push([cx, cy, -1]); return; }
-      var kids = r() < (o.fork3 || 0.25) ? 3 : 2;
-      for (var k = 0; k < kids; k++) {
-        var spread = (o.spread || 0.55) * (k === 0 ? -1 : k === 1 ? 1 : (r() - 0.5));
-        var lean = o.lean || 0;
-        grow(cx, cy, a + spread * (0.6 + r() * 0.7) + lean, len * (0.6 + r() * 0.22), wid * 0.62, depth - 1);
-      }
-    }
-    grow(o.x, o.y, o.angle, o.len, o.width, o.depth);
-    return { ink: out.join(""), spots: spots };
-  }
-
-  // A five-petalled blossom, cut from paper.
-  function blossom(x, y, rad, rot, petal, heart) {
-    var d = "";
-    for (var i = 0; i < 5; i++) {
-      var a = rot + i * Math.PI * 2 / 5;
-      var c = Math.cos(a), s = Math.sin(a), px = -s, py = c;
-      var tip = [x + c * rad, y + s * rad];
-      d += S([[x + c * rad * 0.2, y + s * rad * 0.2, 0],
-        [x + c * rad * 0.62 + px * rad * 0.46, y + s * rad * 0.62 + py * rad * 0.46],
-        [tip[0] + px * rad * 0.16, tip[1] + py * rad * 0.16, 0.6],
-        [tip[0] - px * rad * 0.16, tip[1] - py * rad * 0.16, 0.6],
-        [x + c * rad * 0.62 - px * rad * 0.46, y + s * rad * 0.62 - py * rad * 0.46]], true);
-    }
-    return path(d, petal, { stroke: shade(petal, -0.18), "stroke-width": 0.7 }) +
-      tag("circle", { cx: P.n1(x), cy: P.n1(y), r: P.n1(rad * 0.24), fill: heart });
-  }
-
-  function blossoms(spots, o) {
-    var r = P.rng(o.seed), out = [];
-    for (var i = 0; i < spots.length; i++) {
-      var s = spots[i];
-      var n = s[2] < 0 ? o.tip : o.joint;
-      for (var k = 0; k < n; k++) {
-        var x = s[0] + (r() - 0.5) * o.scatter, y = s[1] + (r() - 0.5) * o.scatter;
-        var rad = o.size * (0.65 + r() * 0.55);
-        var col = r() < 0.3 ? o.colors[1] : o.colors[0];
-        if (r() < 0.16) {
-          out.push(tag("ellipse", { cx: P.n1(x), cy: P.n1(y), rx: P.n1(rad * 0.32), ry: P.n1(rad * 0.46), fill: o.bud, transform: "rotate(" + Math.round(r() * 180) + " " + P.n1(x) + " " + P.n1(y) + ")" }));
-        } else {
-          out.push(blossom(x, y, rad, r() * 6.28, col, o.heart));
-        }
-        if (o.leaf && r() < 0.22) {
-          var a = r() * 6.28;
-          out.push(path(P.leaf(x, y, a, rad * 1.6, rad * 0.5), o.leaf));
-        }
-      }
-    }
-    return out.join("");
-  }
-
-  function willow(defs, o) {
-    var r = P.rng(o.seed), out = [];
-    var tr = branches({ x: o.x, y: o.y, angle: -Math.PI / 2 + (o.lean || 0), len: o.h * 0.42, width: o.w, depth: 3, seed: o.seed, spread: 0.45, kink: 0.35, color: o.ink || INK });
-    out.push(tr.ink);
-    // Long hanging strands from the crown.
-    for (var i = 0; i < o.strands; i++) {
-      var s = tr.spots[Math.floor(r() * tr.spots.length)];
-      var x0 = s[0], y0 = s[1], len = o.h * (0.35 + r() * 0.45), sw = (r() - 0.5) * 30;
-      var spine = [[x0, y0], [x0 + sw * 0.3, y0 + len * 0.3], [x0 + sw * 0.7, y0 + len * 0.65], [x0 + sw, y0 + len]];
-      out.push(path(S(spine, false), "none", { stroke: o.color, "stroke-width": 1 + r() * 0.8, opacity: 0.55 + r() * 0.35 }));
-      for (var k = 1; k < 9; k++) {
-        var t = k / 9, px = x0 + sw * t, py = y0 + len * t;
-        out.push(path(P.leaf(px, py, Math.PI / 2 + (r() - 0.5) * 1.2, 9 + r() * 6, 3), o.color, { opacity: 0.75 }));
-      }
-    }
-    return g({ "class": "sway-slow", style: "transform-origin:" + o.x + "px " + o.y + "px" }, out.join(""));
-  }
-
-  /* ── Rocks, ground, water ──────────────────────────────────────────── */
-
-  // A Taihu rock: a pierced, eroded stone with a few dry-brush texture strokes.
-  function rock(defs, o) {
-    var r = P.rng(o.seed), pts = [], steps = 22;
-    for (var i = 0; i < steps; i++) {
-      var a = i / steps * Math.PI * 2;
-      var rr = 1 + 0.28 * P.noise1(i * 0.7, o.seed) + (r() - 0.5) * 0.1;
-      var x = o.x + Math.cos(a) * o.w / 2 * rr;
-      var y = o.y - o.h / 2 + Math.sin(a) * o.h / 2 * rr * (Math.sin(a) > 0 ? 0.9 : 1);
-      pts.push([x, Math.min(y, o.y)]);
-    }
-    var d = S(pts, true);
-    var holes = "";
-    for (var h = 0; h < (o.holes || 3); h++) {
-      var hx = o.x + (r() - 0.5) * o.w * 0.5, hy = o.y - o.h * (0.3 + r() * 0.45);
-      holes += P.blob(hx, hy, 6 + r() * o.w * 0.06, 0.35, o.seed + h * 7, 10);
-    }
-    var gid = P.id("rk");
-    defs.push(P.linear(gid, 0, 0, 1, 1, [[0, shade(o.color, 0.18)], [1, shade(o.color, -0.18)]]));
-    var tex = "";
-    for (var t = 0; t < 7; t++) {
-      var sx = o.x + (r() - 0.5) * o.w * 0.7, sy = o.y - r() * o.h * 0.85;
-      tex += path(P.stroke([[sx, sy], [sx + 6 + r() * 10, sy + 14 + r() * 18], [sx + 2, sy + 30 + r() * 20]], 0.4, 2.2, 0.3), INK, { opacity: 0.35 });
-    }
-    return path(d + holes, "url(#" + gid + ")", { "fill-rule": "evenodd", stroke: shade(o.color, -0.4), "stroke-width": 1.4 }) + tex;
-  }
-
-  function grass(x, y, w, color, seed, n) {
-    var r = P.rng(seed), out = "";
-    for (var i = 0; i < (n || 14); i++) {
-      var bx = x + r() * w, h = 14 + r() * 26, lean = (r() - 0.5) * 0.9;
-      out += path(P.stroke([[bx, y], [bx + lean * h * 0.5, y - h * 0.55], [bx + lean * h, y - h]], 2.4, 1.6, 0.1), color, { opacity: 0.8 });
-    }
-    return out;
-  }
-
-  function water(defs, o) {
-    var gid = P.id("wt");
-    defs.push(P.linear(gid, 0, 0, 0, 1, [[0, o.top], [1, o.bottom]]));
-    var out = path(S(o.far, false) + "L" + o.near[o.near.length - 1][0] + " " + o.near[o.near.length - 1][1] + S(o.near.slice().reverse(), false).replace(/^M/, "L") + "Z", "url(#" + gid + ")");
-    var r = P.rng(o.seed), rip = "";
-    for (var i = 0; i < o.ripples; i++) {
-      var y = o.y0 + r() * (o.y1 - o.y0), x = r() * W, len = 30 + r() * 120;
-      rip += path("M" + P.n1(x) + " " + P.n1(y) + "q" + P.n1(len / 2) + " " + P.n1(-2 - r() * 2) + " " + P.n1(len) + " 0", "none", { stroke: o.glint, "stroke-width": 1 + r(), opacity: 0.25 + r() * 0.35, "stroke-linecap": "round" });
-    }
-    return out + g({ "class": "shimmer" }, rip);
-  }
-
-  /* ── Architecture ──────────────────────────────────────────────────── */
-
-  // 粉墙黛瓦: a whitewashed garden wall under a grey tiled cap.
-  function wall(defs, o) {
-    var out = "";
-    var gid = P.id("wl");
-    defs.push(P.linear(gid, 0, 0, 0, 1, [[0, shade(o.color, 0.05)], [1, shade(o.color, -0.1)]]));
-    out += tag("rect", { x: o.x0, y: o.y, width: o.x1 - o.x0, height: o.h, fill: "url(#" + gid + ")" });
-    // Cap: eaves line, tile courses, ridge.
-    var cap = o.tile;
-    out += path(poly([[o.x0 - 10, o.y + 4], [o.x1 + 10, o.y + 4], [o.x1 + 4, o.y - 14], [o.x0 - 4, o.y - 14]]), cap);
-    out += tag("rect", { x: o.x0 - 4, y: o.y - 24, width: o.x1 - o.x0 + 8, height: 10, fill: shade(cap, -0.15) });
-    var ends = "";
-    for (var x = o.x0; x < o.x1; x += 16) {
-      ends += tag("circle", { cx: x + 8, cy: o.y + 5, r: 5.2, fill: shade(cap, -0.08) });
-      ends += path("M" + (x + 8) + " " + (o.y - 13) + "V" + (o.y + 1), "none", { stroke: shade(cap, -0.3), "stroke-width": 1, opacity: 0.5 });
-    }
-    out += ends;
-    // Shadow under the eaves.
-    var sg = P.id("ws");
-    defs.push(P.linear(sg, 0, 0, 0, 1, [[0, INK, 0.28], [1, INK, 0]]));
-    out += tag("rect", { x: o.x0, y: o.y + 8, width: o.x1 - o.x0, height: 26, fill: "url(#" + sg + ")" });
-    if (o.windows) {
-      for (var i = 0; i < o.windows.length; i++) out += lattice(defs, o.windows[i]);
-    }
-    return out;
-  }
-
-  function poly(pts) { return P.poly(pts, true); }
-
-  // A leaking window (漏窗) with a lattice pattern.
-  function lattice(defs, o) {
-    var cid = P.id("lc");
-    var shape = o.round ? tag("circle", { cx: o.x, cy: o.y, r: o.r }) :
-      tag("rect", { x: o.x - o.r, y: o.y - o.r * 0.75, width: o.r * 2, height: o.r * 1.5, rx: 6 });
-    defs.push(tag("clipPath", { id: cid }, shape));
-    var bars = "", step = o.r / 3.2;
-    for (var k = -6; k <= 6; k++) {
-      bars += path("M" + (o.x + k * step - o.r * 2) + " " + (o.y - o.r * 2) + "l" + (o.r * 4) + " " + (o.r * 4), "none", { stroke: o.frame, "stroke-width": 3.2 });
-      bars += path("M" + (o.x + k * step + o.r * 2) + " " + (o.y - o.r * 2) + "l" + (-o.r * 4) + " " + (o.r * 4), "none", { stroke: o.frame, "stroke-width": 3.2 });
-    }
-    var inner = o.round ? tag("circle", { cx: o.x, cy: o.y, r: o.r, fill: o.behind }) :
-      tag("rect", { x: o.x - o.r, y: o.y - o.r * 0.75, width: o.r * 2, height: o.r * 1.5, rx: 6, fill: o.behind });
-    var rim = o.round ? tag("circle", { cx: o.x, cy: o.y, r: o.r, fill: "none", stroke: o.frame, "stroke-width": 7 }) :
-      tag("rect", { x: o.x - o.r, y: o.y - o.r * 0.75, width: o.r * 2, height: o.r * 1.5, rx: 6, fill: "none", stroke: o.frame, "stroke-width": 7 });
-    return inner + g({ "clip-path": "url(#" + cid + ")" }, bars) + rim;
-  }
-
-  // A hip-and-gable roof with upturned eaves, seen from the front.
-  function roof(o) {
-    var x = o.x, y = o.y, w = o.w, h = o.h, c = o.color;
-    var lift = o.lift == null ? h * 0.5 : o.lift;
-    var d = S([[x - w / 2 - 18, y - lift, 0], [x - w / 2 + w * 0.08, y + 2], [x, y + 6], [x + w / 2 - w * 0.08, y + 2], [x + w / 2 + 18, y - lift, 0],
-      [x + w / 2 - w * 0.06, y - h * 0.45], [x + w * 0.3, y - h, 0], [x - w * 0.3, y - h, 0], [x - w / 2 + w * 0.06, y - h * 0.45]], true);
-    var lines = "";
-    for (var i = 1; i < 14; i++) {
-      var t = i / 14, lx = x - w * 0.42 + w * 0.84 * t;
-      lines += path("M" + P.n1(lx) + " " + P.n1(y - h * 0.92) + "L" + P.n1(x + (lx - x) * 1.12) + " " + P.n1(y), "none", { stroke: shade(c, -0.3), "stroke-width": 1, opacity: 0.45 });
-    }
-    return path(d, c, { stroke: shade(c, -0.35), "stroke-width": 1.5 }) + lines +
-      tag("rect", { x: P.n1(x - w * 0.32), y: P.n1(y - h - 6), width: P.n1(w * 0.64), height: 8, rx: 2, fill: shade(c, -0.25) });
-  }
-
-  // A low arched stone bridge with a railing.
-  function bridge(defs, o) {
-    var x = o.x, y = o.y, w = o.w, c = o.color;
-    var deck = S([[x - w / 2 - 30, y + 26, 0], [x - w / 4, y + 2], [x, y - 6], [x + w / 4, y + 2], [x + w / 2 + 30, y + 26, 0],
-      [x + w / 2 + 30, y + 44, 0], [x + w * 0.3, y + 44], [x + w * 0.22, y + 26], [x, y + 18], [x - w * 0.22, y + 26], [x - w * 0.3, y + 44], [x - w / 2 - 30, y + 44, 0]], true);
-    var out = "";
-    // Arch opening shadow.
-    out += path(S([[x - w * 0.3, y + 44, 0], [x - w * 0.22, y + 26], [x, y + 18], [x + w * 0.22, y + 26], [x + w * 0.3, y + 44, 0]], true), shade(c, -0.55), { opacity: 0.5 });
-    out += path(deck, c, { stroke: shade(c, -0.35), "stroke-width": 1.4, "fill-rule": "evenodd" });
-    // Railing posts and rail.
-    var rail = "";
-    for (var i = 0; i <= 10; i++) {
-      var t = i / 10, px = x - w / 2 + w * t, py = y - 6 + Math.pow((t - 0.5) * 2, 2) * 30;
-      rail += tag("rect", { x: P.n1(px - 3), y: P.n1(py - 26), width: 6, height: 26, fill: shade(c, -0.12) });
-    }
-    rail += path(S([[x - w / 2, y + 2], [x, y - 28], [x + w / 2, y + 2]], false), "none", { stroke: shade(c, -0.2), "stroke-width": 5, "stroke-linecap": "round" });
-    return out + rail;
-  }
-
-  /* ── 沁芳闸 · peach blossoms by the stream (spring) ───────────────────── */
-  function qinfang(v) {
-    var dusk = v === "dusk";
-    var back = [], mid = [], near = [];
-    var L = [];
-
-    // Far: sky, hills, mist.
-    L.push(layer(0.15, back,
-      sky(back, dusk ? [[0, "#d9c3b0"], [0.55, "#ecd9c0"], [1, "#f1e3cb"]] : [[0, "#e4e1d3"], [0.6, "#efe9da"], [1, "#f4eddd"]]) +
-      hills(back, { seed: 11, y: 330, amp: 120, scale: 520, depth: 260, color: "#7d8a8f", op: 0.55, blur: 4 }) +
-      hills(back, { seed: 23, y: 380, amp: 80, scale: 360, depth: 200, color: "#5f6d70", op: 0.5, blur: 2 }) +
-      mist(back, 400, 160, "#f2ecdd", 0.85)));
-
-    // Middle: willows behind the wall, the wall, the bridge, the stream.
-    var midBody =
-      willow(mid, { x: 160, y: 420, h: 380, w: 12, seed: 5, strands: 26, color: "#8a9a6a" }) +
-      willow(mid, { x: 1380, y: 420, h: 340, w: 10, seed: 9, strands: 22, color: "#94a370" }) +
-      wall(mid, { x0: -BLEED, x1: W + BLEED, y: 352, h: 120, color: "#efe8da", tile: "#5d636b",
-        windows: [{ x: 520, y: 412, r: 30, round: true, frame: "#6d6a63", behind: "#c9cdb8" }, { x: 1240, y: 412, r: 30, frame: "#6d6a63", behind: "#c9cdb8" }] }) +
-      roof({ x: 980, y: 336, w: 220, h: 70, color: "#4f555c" }) +
-      water(mid, { far: [[-BLEED, 486], [400, 478], [900, 492], [1300, 482], [W + BLEED, 488]], near: [[-BLEED, 640], [500, 652], [1000, 630], [W + BLEED, 646]],
-        top: "#b8c9c0", bottom: "#d8e0d2", glint: "#ffffff", seed: 4, ripples: 70, y0: 500, y1: 630 }) +
-      bridge(mid, { x: 900, y: 470, w: 360, color: "#cfc6b4" });
-    L.push(layer(0.35, mid, midBody));
-
-    // Near: the bank, a rock, the peach tree arching overhead.
-    var bankG = P.id("bk");
-    near.push(P.linear(bankG, 0, 0, 0, 1, [[0, "#d6d7b8"], [1, "#c4c39c"]]));
-    var bank = path(S([[-BLEED, 642], [300, 628], [700, 650], [1100, 634], [W + BLEED, 646]], false) + "L" + (W + BLEED) + " " + (H + BLEED) + "L" + (-BLEED) + " " + (H + BLEED) + "Z", "url(#" + bankG + ")");
-    var tree = branches({ x: 250, y: 900, angle: -1.25, len: 330, width: 34, depth: 5, seed: 31, spread: 0.6, kink: 0.55, lean: 0.12 });
-    var flowers = blossoms(tree.spots.filter(function (s) { return s[1] < 640; }), {
-      seed: 8, tip: 6, joint: 2, scatter: 46, size: 11, colors: ["#f3b7bd", "#e98e9a"], heart: "#b2434f", bud: "#c95767", leaf: "#93a86a"
+  // Ribbons tied on branches for the flower-god festival.
+  function ribbons(spots, seed) {
+    var r = P.rng(seed), s = "", cols = ["#c8453a", "#e3b34a", "#5d8f6a", "#4f6fa3", "#c76b9a"];
+    spots.forEach(function (p) {
+      if (p[2] !== -1 || r() > 0.32) return;
+      var c = cols[Math.floor(r() * cols.length)], len = 26 + r() * 40, sw = (r() - 0.5) * 16;
+      s += path(S([[p[0], p[1]], [p[0] + sw * 0.4, p[1] + len * 0.5], [p[0] + sw, p[1] + len]], false), "none", { stroke: c, "stroke-width": 3.2, "stroke-linecap": "round", opacity: 0.9 });
     });
-    var fallen = "";
-    var rr = P.rng(77);
-    for (var i = 0; i < 90; i++) {
-      var fx = rr() * W, fy = 650 + rr() * 240;
-      fallen += tag("ellipse", { cx: P.n1(fx), cy: P.n1(fy), rx: P.n1(3 + rr() * 3), ry: P.n1(1.6 + rr() * 1.6), fill: rr() < 0.5 ? "#f3b7bd" : "#e98e9a", opacity: 0.85, transform: "rotate(" + Math.round(rr() * 180) + " " + P.n1(fx) + " " + P.n1(fy) + ")" });
-    }
-    L.push(layer(0.6, near,
-      bank + fallen +
-      grass(-20, 900, 1640, "#8c9a5e", 3, 60) +
-      rock(near, { x: 1290, y: 800, w: 230, h: 240, seed: 12, color: "#a9aba0", holes: 3 }) +
-      g({ "class": "sway-slow", style: "transform-origin:250px 900px" }, tree.ink + flowers)));
-
-    return { layers: L, fx: { petals: dusk ? 18 : 26 }, light: dusk ? "dusk" : "day" };
+    return g({ "class": "sway", style: "transform-origin:50% 0;animation-duration:4.5s" }, s);
   }
 
-  var SCENES = { qinfang: qinfang };
+  // Snow lying along branch spines: pale strokes on the upper edges.
+  function snowOnBranches(spots, seed) {
+    var r = P.rng(seed), s = "";
+    spots.forEach(function (p) {
+      if (r() > 0.6) return;
+      var l = 6 + r() * 16;
+      s += path("M" + n1(p[0] - l) + " " + n1(p[1] - 2) + "q" + n1(l) + " -5 " + n1(l * 2) + " 0", "none", { stroke: "#f8fbfe", "stroke-width": n1(2.5 + r() * 3), "stroke-linecap": "round" });
+    });
+    return s;
+  }
+
+  /* ── 沁芳闸: the stream under the peach trees ─────────────────────────
+     day · dusk · festival (芒种, ribbons and butterflies) · winter        */
+  SCENES.qinfang = function (v) {
+    var winter = v === "winter", dusk = v === "dusk", fest = v === "festival";
+    var L = [], d0 = [], d1 = [], d2 = [], d3 = [], df = [];
+
+    var skyStops = winter ? [[0, "#d9dde0"], [0.6, "#e8eaea"], [1, "#efefec"]] :
+      dusk ? [[0, "#cfae98"], [0.5, "#e8c9a6"], [1, "#f1dfc2"]] : [[0, "#e2e1d2"], [0.6, "#eee9d9"], [1, "#f4eddd"]];
+    L.push(layer(0.12, d0,
+      X.sky(d0, skyStops) +
+      (dusk ? X.moon(d0, 1180, 170, 34, { color: "#f6d8b0", halo: "#ffd9a8" }) : "") +
+      X.hills(d0, { seed: 11, y: 330, amp: 120, scale: 520, depth: 260, color: winter ? "#8b949a" : "#7d8a8f", op: 0.5, blur: 4 }) +
+      X.hills(d0, { seed: 23, y: 380, amp: 80, scale: 360, depth: 200, color: winter ? "#6f7a80" : "#5f6d70", op: 0.45, blur: 2 }) +
+      X.mist(d0, 400, 170, winter ? "#eef0f0" : "#f2ecdd", 0.85)));
+
+    var wallCol = "#efe8da", tile = "#5d636b";
+    L.push(layer(0.25, d1,
+      X.willow(d1, { x: 250, y: 430, h: 360, w: 12, seed: 5, strands: winter ? 0 : 34, colors: ["#8fa36a", "#a3b47a", "#7f9460"] }) +
+      B.roof({ x: 470, y: 338, w: 230, h: 72, color: "#4f555c", snow: winter }) +
+      B.wall(d1, { x0: -BLEED, x1: W + BLEED, y: 356, h: 130, color: wallCol, tile: tile, snow: winter,
+        gate: { x: 1010, y: 452, r: 62 },
+        windows: [{ x: 640, y: 418, r: 30, shape: "round", frame: "#6d6a63", behind: winter ? "#dfe3e4" : "#c9cdb8" }, { x: 1340, y: 418, r: 28, shape: "hex", pattern: "grid", frame: "#6d6a63", behind: "#c9cdb8" }] })));
+
+    var waterTop = winter ? "#d7dde0" : "#b8c9c0", waterBot = winter ? "#e6eaeb" : "#d8e0d2";
+    var floating = "";
+    if (!winter) floating = X.scatter({ seed: 61, n: 26, x0: 0, x1: 1500, y0: 520, y1: 640, r: 3.4, colors: ["#f3b7bd", "#ea94a0"] });
+    L.push(layer(0.38, d2,
+      X.water(d2, { far: [[-BLEED, 492], [400, 484], [900, 498], [1300, 488], [W + BLEED, 494]], near: [[-BLEED, 652], [500, 662], [1000, 640], [W + BLEED, 656]],
+        top: waterTop, bottom: waterBot, glint: "#ffffff", seed: 4, ripples: winter ? 20 : 70, y0: 505, y1: 640 }) + floating +
+      B.bridge(d2, { x: 760, y: 478, w: 380, color: "#cfc6b4", snow: winter }) +
+      X.rock(d2, { x: 300, y: 520, w: 90, h: 80, seed: 21, color: "#a9a99c", holes: 0, snow: winter }) +
+      (winter ? "" : X.reeds({ seed: 8, n: 9, x0: 1040, x1: 1180, y: 520, h: 70, color: "#8a9566", plume: "#d8d2b8" }))));
+
+    var tree = X.branches({ x: -20, y: 905, angle: -1.32, len: 290, width: 40, depth: 5, seed: 31, spread: 0.52, kink: 0.5, lean: 0.06, up: 0.55 });
+    var high = function (s) { return s[1] < 430; };
+    var flowers = winter ? snowOnBranches(tree.spots, 3) : X.blossoms(tree.spots, {
+      seed: 8, tip: 6, joint: 2, scatter: 46, size: 11, colors: ["#f3b7bd", "#e98e9a", "#f6c9cc"], heart: "#b2434f", bud: "#c95767", leaf: "#93a86a", filter: high
+    });
+    var groundTop = winter ? "#f1f2f1" : "#d8d8b9", groundBot = winter ? "#e1e4e6" : "#c4c39c";
+    var petals = winter ? X.scatter({ seed: 77, n: 40, x0: 0, x1: 1600, y0: 680, y1: 890, r: 6, colors: ["#ffffff", "#e9eef2"], op: 0.9 }) :
+      X.scatter({ seed: 77, n: 120, x0: 0, x1: 1600, y0: 660, y1: 895, r: 4.2, colors: ["#f3b7bd", "#e98e9a", "#f7d2d4"] });
+    L.push(layer(0.55, d3,
+      ground(d3, [[-BLEED, 650], [300, 636], [700, 656], [1100, 640], [W + BLEED, 652]], groundTop, groundBot) + petals +
+      X.grass(-20, 900, 1640, winter ? "#b9bfb4" : "#8c9a5e", 3, winter ? 20 : 70) +
+      X.rock(d3, { x: 1110, y: 790, w: 150, h: 260, seed: 12, color: "#a9aba0", holes: 2, snow: winter }) +
+      g({ "class": "sway-slow", style: "transform-origin:20px 900px" }, tree.ink + flowers + (fest ? ribbons(tree.spots, 4) : ""))));
+
+    L.push(layer(0.9, df,
+      X.grass(-40, 912, 320, winter ? "#c9cec7" : "#6f7d48", 9, 18, 40) + X.grass(1000, 912, 640, winter ? "#c9cec7" : "#6f7d48", 10, 16, 36),
+      { front: true }));
+
+    return {
+      layers: L,
+      fx: winter ? { snow: 90 } : fest ? { butterflies: 2 } : { petals: dusk ? 16 : 26 },
+      light: dusk ? "dusk" : winter ? "snow" : ""
+    };
+  };
+
+  /* ── 花冢: the flower mound on the hillside ──────────────────────────── */
+  SCENES.huazhong = function () {
+    var L = [], d0 = [], d1 = [], d2 = [], d3 = [], df = [];
+    L.push(layer(0.12, d0,
+      X.sky(d0, [[0, "#d9c7b2"], [0.55, "#ecdcc4"], [1, "#f3e6cf"]]) +
+      X.cloud(d0, { x: 900, y: 120, w: 520, h: 70, seed: 3, color: "#fff6e8", op: 0.7, blur: 14 }) +
+      X.hills(d0, { seed: 41, y: 360, amp: 110, scale: 420, depth: 240, color: "#7c8580", op: 0.45, blur: 4 }) +
+      X.mist(d0, 420, 180, "#f3e6cf", 0.85)));
+    L.push(layer(0.24, d1,
+      X.water(d1, { far: [[-BLEED, 470], [1700, 462]], near: [[-BLEED, 520], [1700, 500]], top: "#b9c6bd", bottom: "#d5dccf", glint: "#fff", seed: 9, ripples: 30, y0: 470, y1: 505 }) +
+      B.pavilion(d1, { x: 980, y: 478, w: 120, h: 92, roof: "#545a60", pillar: "#8c3b30", rail: "#7b4a36" }) +
+      X.willow(d1, { x: 1210, y: 500, h: 300, w: 10, seed: 15, strands: 30, colors: ["#8fa36a", "#a3b47a"] }) +
+      X.willow(d1, { x: 760, y: 492, h: 240, w: 8, seed: 19, strands: 20, colors: ["#94a870", "#a8b880"] })));
+    var slope = [[-BLEED, 530], [200, 548], [460, 600], [760, 650], [1100, 690], [W + BLEED, 700]];
+    var mx = 600;
+    var mound = path(S([[mx - 90, 676], [mx - 60, 640], [mx, 624], [mx + 60, 638], [mx + 92, 676]], false) + "Z", "#a58f6e") +
+      path(S([[mx - 80, 652], [mx - 20, 632], [mx + 50, 640]], false), "none", { stroke: "#8a7458", "stroke-width": 2, opacity: 0.6 }) +
+      X.scatter({ seed: 5, n: 40, x0: mx - 80, x1: mx + 80, y0: 628, y1: 672, r: 4, colors: ["#f3b7bd", "#e98e9a", "#f7d2d4"] }) +
+      B.rect(mx - 14, 596, 28, 46, "#b8b2a4", { rx: 3 });
+    L.push(layer(0.4, d2,
+      ground(d2, slope, "#cfc9a0", "#b9b48a") + mound +
+      X.grass(-40, 600, 600, "#8c9a5e", 12, 40, 30)));
+    var tree = X.branches({ x: 120, y: 760, angle: -1.3, len: 260, width: 30, depth: 5, seed: 57, spread: 0.62, kink: 0.6, lean: 0.08 });
+    L.push(layer(0.58, d3,
+      ground(d3, [[-BLEED, 720], [500, 740], [1000, 728], [W + BLEED, 744]], "#d1cca2", "#bdb88e") +
+      X.scatter({ seed: 9, n: 160, x0: 0, x1: 1600, y0: 730, y1: 900, r: 4.4, colors: ["#f3b7bd", "#e98e9a", "#f7d2d4", "#f0e2d0"] }) +
+      g({ "class": "sway-slow", style: "transform-origin:120px 760px" }, tree.ink + X.blossoms(tree.spots, { seed: 12, tip: 5, joint: 2, scatter: 40, size: 10, colors: ["#f3b7bd", "#e98e9a", "#f8d6d8"], heart: "#b2434f", bud: "#c95767", leaf: "#93a86a", filter: function (s) { return s[1] < 470; } })) +
+      X.rock(d3, { x: 1060, y: 820, w: 130, h: 170, seed: 33, color: "#a8a596", holes: 1 })));
+    L.push(layer(0.9, df, X.grass(-40, 912, 1680, "#6f7d48", 14, 30, 34), { front: true }));
+    return { layers: L, fx: { petals: 36 }, light: "dusk" };
+  };
+
+  /* ── 灵河: the river of the spirit, by the Stone of Three Lives ───────
+     Gold on indigo, the way a sutra is written on blue paper (泥金磁青).
+     dawn (the prologue) · night (the title) · bloom (the true ending)   */
+  SCENES.linghe = function (v) {
+    var night = v === "night", bloom = v === "bloom";
+    var gold = "#d8b46a", L = [], d0 = [], d1 = [], d2 = [], d3 = [], dg = [], df = [];
+    var skyStops = night ? [[0, "#0d1430"], [0.55, "#1b2a55"], [1, "#2c3f75"]] :
+      bloom ? [[0, "#1d2550"], [0.5, "#4a3f6e"], [1, "#b98a6a"]] : [[0, "#18224a"], [0.55, "#34477e"], [1, "#a98a8e"]];
+    var far = X.sky(d0, skyStops);
+    if (night) far += X.stars({ seed: 4, n: 120, x: -40, y: -40, w: 1680, h: 460 });
+    far += X.moon(d0, night ? 1330 : 1180, night ? 250 : 190, night ? 92 : 48, night ? {} : { color: "#f6dcc0", halo: "#ffd6b0" });
+    far += X.hills(d0, { seed: 71, y: 420, amp: 150, scale: 380, depth: 240, color: "#0c1230", op: 0.75, blur: 1.5, ridge: gold, ridgeW: 1.4, ridgeOp: 0.55 });
+    far += X.hills(d0, { seed: 73, y: 480, amp: 90, scale: 300, depth: 200, color: "#0a0f28", op: 0.85, blur: 0.5, ridge: gold, ridgeW: 1.2, ridgeOp: 0.5 });
+    L.push(layer(0.1, d0, far + X.mist(d0, 480, 120, "#9fb0d8", 0.35)));
+
+    var clouds = X.xiangyun(d1, 260, 150, 1.25, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 860, 90, 0.9, { flip: true, drift: true, fill: "#2a3a70" }) +
+      X.xiangyun(d1, 620, 300, 0.7, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 1480, 120, 1, { flip: true, drift: true, fill: "#2a3a70" });
+    L.push(layer(0.2, d1, clouds));
+
+    var river = X.water(d2, { far: [[-BLEED, 548], [500, 540], [1000, 556], [W + BLEED, 546]], near: [[-BLEED, 690], [600, 676], [1100, 698], [W + BLEED, 684]],
+      top: "#26386e", bottom: "#3d5590", glint: gold, seed: 13, ripples: 80, y0: 556, y1: 684 });
+    L.push(layer(0.36, d2, river + X.mist(d2, 560, 60, "#c8d3f0", 0.25)));
+
+    // The bank, the Stone, the crimson pearl grass.
+    var bank = ground(d3, [[-BLEED, 690], [400, 676], [800, 700], [1200, 686], [W + BLEED, 696]], "#1c2550", "#121a3c");
+    bank += path(S([[-BLEED, 690], [400, 676], [800, 700], [1200, 686], [W + BLEED, 696]], false), "none", { stroke: gold, "stroke-width": 1.6, opacity: 0.6 });
+    var stone = path(S([[300, 760], [296, 690], [330, 610], [400, 570], [470, 572], [522, 616], [540, 700], [532, 760]], true),
+      X.grad(d3, 0, 0, 1, 1, [[0, "#e9efe6"], [0.6, "#bccdc4"], [1, "#7f9a95"]]), { stroke: gold, "stroke-width": 2 });
+    stone += path(S([[338, 640], [372, 606], [420, 594]], false), "none", { stroke: "#ffffff", "stroke-width": 3, opacity: 0.5 });
+    ["三", "生", "石"].forEach(function (c, i) {
+      stone += tag("text", { x: 432, y: 640 + i * 34, "text-anchor": "middle", "font-family": "Ma Shan Zheng, serif", "font-size": 30, fill: "#8a6a3a", opacity: 0.55 }, c);
+    });
+    var grass = "";
+    var gr = P.rng(5), berries = bloom ? 16 : 9;
+    for (var i = 0; i < 7; i++) {
+      var bx = 590 + i * 16 + gr() * 10, bh = 90 + gr() * 80, lean = (gr() - 0.5) * 0.6;
+      var tip = [bx + lean * bh * 0.6, 742 - bh];
+      grass += path(S([[bx, 744], [bx + lean * bh * 0.2, 742 - bh * 0.5], tip], false), "none", { stroke: "#6f9a6a", "stroke-width": 2.2 });
+      grass += path(P.leaf(bx + lean * 20, 742 - bh * 0.4, -Math.PI / 2 + lean + (i % 2 ? 0.8 : -0.8), 30, 7), "#5f8a5c");
+    }
+    for (var b = 0; b < berries; b++) {
+      var px = 586 + gr() * 120, py = 600 + gr() * 110;
+      grass += tag("circle", { cx: n1(px), cy: n1(py), r: n1(4 + gr() * 3.5), fill: X.rgrad(d3, [[0, "#ffd9d9"], [0.3, "#e0475a"], [1, "#7e1620"]], 0.38, 0.32, 0.7), "class": "pulse", style: "animation-delay:-" + (gr() * 3).toFixed(1) + "s" });
+    }
+    if (bloom) {
+      for (var f = 0; f < 3; f++) grass += X.blossom(600 + f * 40, 600 - f * 16, 13, f, "#e0475a", "#ffd27a");
+    }
+    L.push(layer(0.55, d3, bank + stone + grass + X.reeds({ seed: 31, n: 10, x0: 1040, x1: 1240, y: 700, h: 120, color: "#4c5f86", plume: gold })));
+
+    // Light: the pearls and the stone glow through the night tint.
+    L.push(layer(0.55, dg,
+      tag("ellipse", { cx: 650, cy: 660, rx: 140, ry: 110, fill: X.rgrad(dg, [[0, "#ff6a7a", 0.35], [1, "#ff6a7a", 0]]), "class": "pulse" }) +
+      tag("ellipse", { cx: 420, cy: 660, rx: 190, ry: 150, fill: X.rgrad(dg, [[0, "#d7f0e6", 0.22], [1, "#d7f0e6", 0]]) }),
+      { glow: true }));
+    L.push(layer(0.85, df, X.xiangyun(df, -20, 860, 1.4, { drift: true, fill: "#141c44", fillOp: 0.8 }) + X.xiangyun(df, 1180, 880, 1.2, { flip: true, drift: true, fill: "#141c44", fillOp: 0.8 }), { front: true }));
+
+    return { layers: L, fx: { motes: bloom ? 70 : 46 }, light: "", dream: true };
+  };
+
+  /* ── 凹晶馆: the hollow by the pond, mid-autumn night ─────────────────── */
+  SCENES.aojing = function () {
+    var L = [], d0 = [], d1 = [], d2 = [], d3 = [], dg = [], df = [];
+    L.push(layer(0.1, d0,
+      X.sky(d0, [[0, "#0f1730"], [0.6, "#1f2c52"], [1, "#2e3e66"]]) +
+      X.stars({ seed: 9, n: 50, x: -40, y: -40, w: 1680, h: 300, color: "#f3ecd8" }) +
+      X.moon(d0, 610, 175, 74, {}) +
+      X.cloud(d0, { x: 900, y: 230, w: 420, h: 40, seed: 2, color: "#9aa8c8", op: 0.35, blur: 8 })));
+    var hill = X.hills(d1, { seed: 91, x0: -100, x1: 520, y: 360, amp: 140, scale: 260, depth: 160, color: "#141b33", op: 0.95, blur: 0.5 });
+    var lights = "";
+    [[150, 270], [190, 262], [230, 274]].forEach(function (p) { lights += tag("circle", { cx: p[0], cy: p[1], r: 3, fill: "#ffd27a", "class": "flicker" }); });
+    L.push(layer(0.22, d1, hill + B.pavilion(d1, { x: 190, y: 300, w: 90, h: 64, roof: "#1e2438", pillar: "#3a2a2a", rail: "#2c2424", stone: "#3a3f52" }) + lights +
+      X.hills(d1, { seed: 93, x0: 900, x1: 1700, y: 420, amp: 70, scale: 300, depth: 120, color: "#151c34", op: 0.9 })));
+    var reflection = "";
+    var rr = P.rng(4);
+    for (var i = 0; i < 26; i++) {
+      var y = 470 + i * 15, w = 70 - i * 1.6 + rr() * 30;
+      reflection += tag("ellipse", { cx: n1(610 + (rr() - 0.5) * 30), cy: y, rx: n1(w), ry: 2.6, fill: "#fff1c8", opacity: n1(0.65 - i * 0.02) });
+    }
+    L.push(layer(0.36, d2,
+      X.water(d2, { far: [[-BLEED, 440], [800, 446], [W + BLEED, 438]], near: [[-BLEED, 820], [W + BLEED, 820]], top: "#1c2a4c", bottom: "#2c3e66", glint: "#c9d6f0", seed: 6, ripples: 90, y0: 450, y1: 800 }) +
+      g({ "class": "shimmer" }, reflection) +
+      X.lotus({ seed: 7, n: 14, x0: 900, x1: 1240, y: 640, h: 120, stem: "#4a4a3a", pod: "#6a5e44", leaf: ["#4a4636", "#5a5240", "#3e3a2e"] }) +
+      X.lotus({ seed: 8, n: 8, x0: -20, x1: 160, y: 600, h: 100, stem: "#4a4a3a", pod: "#6a5e44", leaf: ["#4a4636", "#5a5240"] })));
+    // The stone terrace of 凹晶馆 where they stand, its railing behind them.
+    var terrace = B.rect(-BLEED, 812, W + BLEED * 2, 120, X.grad(d3, 0, 0, 0, 1, [[0, "#5a5f70"], [1, "#3a3e4c"]])) +
+      B.railing({ x0: -BLEED, x1: W + BLEED, y: 812, h: 60, color: "#6a6f80", step: 70 });
+    var hall = B.pillar(d3, 1060, 330, 812, 18, "#4a3030") + B.pillar(d3, 1420, 330, 812, 18, "#4a3030") +
+      B.rect(1060, 330, 360, 26, "#3a2a2a") +
+      B.lattice(d3, { x: 1240, y: 370, r: 150, w: 330, h: 40, shape: "rect", pattern: "grid", step: 22, frame: "#3a2a2a", behind: "#1a2238", rim: 5, bar: 2.4 }) +
+      B.railing({ x0: 1060, x1: 1420, y: 812, h: 70, color: "#5a4a4a", step: 60 }) +
+      B.lantern(d3, { x: 1240, y: 420, s: 0.8, color: "#b23a32", lit: true, cord: 30 }) +
+      B.roof({ x: 1240, y: 330, w: 440, h: 110, color: "#262c40" });
+    L.push(layer(0.55, d3, terrace + hall));
+    L.push(layer(0.55, dg,
+      tag("circle", { cx: 610, cy: 175, r: 260, fill: X.rgrad(dg, [[0, "#fff0c8", 0.3], [1, "#fff0c8", 0]]) }) +
+      tag("ellipse", { cx: 610, cy: 640, rx: 120, ry: 200, fill: X.rgrad(dg, [[0, "#fff0c8", 0.18], [1, "#fff0c8", 0]]) }) +
+      tag("circle", { cx: 1240, cy: 470, r: 140, fill: X.rgrad(dg, [[0, "#ffc070", 0.4], [1, "#ffc070", 0]]), "class": "flicker" }), { glow: true }));
+    L.push(layer(0.9, df, X.reeds({ seed: 12, n: 16, x0: -40, x1: 160, y: 910, h: 230, color: "#2a3048", plume: "#8a90a8" }), { front: true }));
+    return { layers: L, fx: {}, light: "night" };
+  };
+
+  /* ── 白茫茫: the ferry in the snow ───────────────────────────────────── */
+  SCENES.snow = function () {
+    var L = [], d0 = [], d1 = [], d2 = [], df = [];
+    L.push(layer(0.1, d0,
+      X.sky(d0, [[0, "#dde1e4"], [0.6, "#eceeef"], [1, "#f4f5f5"]]) +
+      X.hills(d0, { seed: 101, y: 470, amp: 70, scale: 420, depth: 120, color: "#a9b0b5", op: 0.35, blur: 5 }) +
+      X.mist(d0, 470, 120, "#f4f5f5", 0.9)));
+    L.push(layer(0.25, d1,
+      X.water(d1, { far: [[-BLEED, 512], [800, 508], [W + BLEED, 514]], near: [[-BLEED, 600], [700, 612], [W + BLEED, 598]], top: "#c3cad0", bottom: "#d6dbdf", glint: "#ffffff", seed: 3, ripples: 30, y0: 515, y1: 600 }) +
+      X.reeds({ seed: 5, n: 18, x0: 980, x1: 1300, y: 512, h: 60, color: "#8a8f8f", plume: "#e9ecec" })));
+    var shore = ground(d2, [[-BLEED, 606], [500, 616], [900, 604], [W + BLEED, 612]], "#f8f9f9", "#eceff1");
+    L.push(layer(0.42, d2, shore +
+      B.boat({ x: 600, y: 602, w: 260, snow: true }) +
+      B.tiny({ x: 500, y: 590, s: 1.5, kneel: true, color: "#b3241f" }) +
+      B.tiny({ x: 790, y: 646, s: 1.45, color: "#3a3532" }) + B.tiny({ x: 826, y: 648, s: 1.4, color: "#5a5048" }) +
+      X.reeds({ seed: 9, n: 12, x0: 40, x1: 260, y: 640, h: 90, color: "#7d8282", plume: "#eef0f0" })));
+    L.push(layer(0.85, df, X.reeds({ seed: 14, n: 10, x0: 1000, x1: 1180, y: 912, h: 160, color: "#8a8f8f", plume: "#f3f4f4" }), { front: true }));
+    return { layers: L, fx: { snow: 120 }, light: "snow" };
+  };
 
   function build(name, variant) {
     var s = SCENES[name];
-    return s ? s(variant) : null;
+    return s ? s(variant || "") : null;
   }
 
-  kit.scenes = { SCENES: SCENES, build: build, W: W, H: H, BLEED: BLEED };
+  kit.scenes = { SCENES: SCENES, build: build, layer: layer, ground: ground, ribbons: ribbons, snowOnBranches: snowOnBranches, W: W, H: H, BLEED: BLEED };
 })(window.HonglouKit);
