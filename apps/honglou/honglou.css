@@ -483,6 +483,7 @@ button { font: inherit; color: inherit; }
   animation: fade-in .4s ease both;
 }
 .app.is-horizontal .choices { width: var(--sw); height: calc(var(--sh) - var(--u) * 262); }
+.app.is-horizontal .stick { min-height: calc(var(--u) * 400); max-height: calc(var(--u) * 520); }
 .choice-prompt { display: none; }
 .sticks {
   position: relative;
@@ -1031,7 +1032,7 @@ button { font: inherit; color: inherit; }
 .config { display: grid; grid-template-columns: max-content 1fr; gap: 18px 24px; align-items: center; font-size: 18px; }
 .config label { color: var(--ink-2); }
 .config input[type="range"] { width: 100%; accent-color: var(--zhu); }
-.seg { display: inline-flex; border: 1px solid rgba(178, 55, 43, .45); border-radius: 4px; overflow: hidden; }
+.seg { display: inline-flex; justify-self: start; border: 1px solid rgba(178, 55, 43, .45); border-radius: 4px; overflow: hidden; }
 .seg button { border: 0; padding: 6px 16px; background: transparent; cursor: pointer; font-size: 16px; }
 .seg button.is-on { background: var(--zhu); color: #fbf1e3; }
 .seg button:focus-visible { outline: 2px solid var(--zhu); outline-offset: -2px; }
@@ -1057,6 +1058,7 @@ button { font: inherit; color: inherit; }
 
 .log {
   writing-mode: vertical-rl;
+  width: 100%;
   height: min(480px, 60vh);
   overflow-x: auto;
   overflow-y: hidden;
