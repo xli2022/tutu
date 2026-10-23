@@ -165,8 +165,8 @@
     far += X.hills(d0, { seed: 73, y: 480, amp: 90, scale: 300, depth: 200, color: "#0a0f28", op: 0.85, blur: 0.5, ridge: gold, ridgeW: 1.2, ridgeOp: 0.5 });
     L.push(layer(0.1, d0, far + X.mist(d0, 480, 120, "#9fb0d8", 0.35)));
 
-    var clouds = X.xiangyun(d1, 260, 150, 1.25, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 860, 90, 0.9, { flip: true, drift: true, fill: "#2a3a70" }) +
-      X.xiangyun(d1, 620, 300, 0.7, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 1480, 120, 1, { flip: true, drift: true, fill: "#2a3a70" });
+    var clouds = X.xiangyun(d1, 620, 190, 1.15, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 920, 80, 0.85, { flip: true, drift: true, fill: "#2a3a70" }) +
+      X.xiangyun(d1, 470, 370, 0.6, { drift: true, fill: "#2a3a70" }) + X.xiangyun(d1, 1480, 120, 1, { flip: true, drift: true, fill: "#2a3a70" });
     L.push(layer(0.2, d1, clouds));
 
     var river = X.water(d2, { far: [[-BLEED, 548], [500, 540], [1000, 556], [W + BLEED, 546]], near: [[-BLEED, 690], [600, 676], [1100, 698], [W + BLEED, 684]],

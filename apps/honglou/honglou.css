@@ -497,10 +497,10 @@ button { font: inherit; color: inherit; }
   --lift: 0px;
   position: relative;
   writing-mode: vertical-rl;
-  width: calc(var(--u) * 84);
+  min-width: calc(var(--u) * 84);
   min-height: calc(var(--u) * 470);
   max-height: calc(var(--u) * 640);
-  padding: calc(var(--u) * 104) 0 calc(var(--u) * 70);
+  padding: calc(var(--u) * 104) calc(var(--u) * 18) calc(var(--u) * 70);
   border: 0;
   border-radius: calc(var(--u) * 12) calc(var(--u) * 12) calc(var(--u) * 6) calc(var(--u) * 6);
   background:
@@ -1136,7 +1136,7 @@ button { font: inherit; color: inherit; }
   height: auto;
   bottom: 0;
 }
-.app.is-portrait .stick { width: 64px; min-height: 0; height: min(60vh, 440px); padding-top: 70px; padding-bottom: 46px; font-size: 18px; }
+.app.is-portrait .stick { width: auto; min-width: 64px; min-height: 0; max-height: none; height: min(56vh, 420px); padding: 70px 12px 46px; font-size: 18px; }
 .app.is-portrait .stick-flower { width: 46px; height: 46px; margin-left: -23px; top: 10px; }
 .app.is-portrait .sticks { gap: 12px; margin-bottom: -30px; }
 .app.is-portrait .lot-pot { width: min(92vw, 340px); height: 80px; }
@@ -1144,7 +1144,12 @@ button { font: inherit; color: inherit; }
 .app.is-portrait .title-name { flex-direction: row; font-size: 64px; }
 .app.is-portrait .title-sub { writing-mode: horizontal-tb; font-size: 24px; margin-top: 10px; }
 .app.is-portrait .seal-title { font-size: 16px; }
-.app.is-portrait .title-epigraph { left: 14px; top: calc(var(--sy) + 10px); font-size: 13px; }
+.app.is-portrait .title-epigraph { left: auto; right: 50%; transform: translateX(50%); top: calc(var(--sy) + var(--sh) + 250px); font-size: 15px; letter-spacing: .25em; line-height: 2.2; }
+.app.is-portrait .chapter-name { font-size: 96px; }
+.app.is-portrait .chapter-couplet { font-size: 20px; }
+.app.is-portrait .chapter-num { font-size: 26px; }
+.app.is-portrait .card-text { font-size: 20px; }
+.app.is-portrait .ending-name { font-size: 54px; }
 .app.is-portrait .title-menu { bottom: max(28px, env(safe-area-inset-bottom)); gap: 10px; }
 .app.is-portrait .title-menu button { font-size: 24px; padding: 10px 8px; }
 /* The string of pearls lies across the top of the page instead. */

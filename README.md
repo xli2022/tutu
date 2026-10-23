@@ -28,12 +28,22 @@ apps/
     vault.js                                    # password-locked storage
     charts.js   sample.js                       # SVG charts, demo statements
     vendor/pdfjs/                               # Mozilla pdf.js, unmodified
+  honglou/                   # 还泪记, a visual novel
+    index.html  honglou.css  honglou.js         # page, styles, wiring + saves
+    engine.js   story.js                        # script reader, the story itself
+    stage.js                                    # scenes, figures, particles, transitions
+    paint.js    scenery.js  buildings.js        # drawing kit, nature, architecture
+    scenes.js   scenes-rooms.js                 # the eleven backdrops
+    figures.js  cast.js                         # paper-cut figures, the roster
+    audio.js                                    # procedural guzheng and sounds
+    fonts/                                      # three subset OFL fonts + build.py
 ```
 
-No build step and no external requests: plain static files. The one
-third-party piece is Mozilla's [pdf.js](https://mozilla.github.io/pdf.js/),
-vendored unmodified in `apps/spendscape/vendor/pdfjs/` (see its README for
-version and checksums) and loaded only when someone opens a PDF. Everything
+No build step and no external requests: plain static files. The third-party
+pieces are Mozilla's [pdf.js](https://mozilla.github.io/pdf.js/), vendored
+unmodified in `apps/spendscape/vendor/pdfjs/` (see its README for version and
+checksums) and loaded only when someone opens a PDF, and three OFL fonts for
+还泪记, subset and self-hosted in `apps/honglou/fonts/` with their licences. Everything
 also works opened straight from disk, except reading PDFs: browsers don't load
 JavaScript modules from `file://`, so that needs the page served over http(s).
 
@@ -268,6 +278,109 @@ details below the divider) → a day, merchant or search (the transaction list).
 `window.Spendscape` exposes `state()`, `txns()`, `loadSample()`,
 `importText(name, text)`, `setPreset()`, `setGran()`, `setMode()`, `setFocus()`
 and `togglePeriod(isoDate)` for driving the app from a test harness.
+
+### 还泪记
+
+A visual novel of *Dream of the Red Chamber* (红楼梦), in Chinese. You are
+林黛玉, the crimson pearl grass (绛珠草) come down to the world to repay the
+stone's daily watering with every tear of a lifetime. Eight chapters drawn
+from the novel's best-known episodes (初见, 西厢, 葬花, 知己, 诗社, 秋窗, 冷月,
+还泪), each titled with the novel's own chapter couplets, plus a prologue, a
+snow epilogue and four endings. A playthrough is about 330 lines.
+
+#### The tears
+
+Her tears are ten crimson pearls on a red string. A tear shed for 宝玉 drops
+into the jade (宝玉) and is *repaid*; a tear for anything else (homesickness,
+a quarrel, an opera, the rain) falls *in vain*. There are four chances to weep
+for him and eight to weep for anything else before the winter, so weeping at
+every turn spends the string by the mid-autumn moon and ends the story there
+(冷月葬花魂). In the last chapter whatever is left falls at once: repaid if she
+lets him go gently, in vain if she burns her poems. The true ending
+(质本洁来还洁去) needs her not to have burned them, to say 「你放心」 at the end
+(which takes enough closeness, or having said it in 知己), and six pearls
+repaid, which works out to no more than four tears in vain before winter.
+Closeness (`heart`) and her friendship with 宝钗 (`orchid`) are kept but never
+shown.
+
+#### How it looks
+
+- **A paper diorama.** Every scene is four to six flat layers cut from paper
+  at different depths, with drop shadows between them, a soft-light rice
+  paper grain over everything and slow parallax. Far layers are ink wash,
+  near ones are cut sharp. Light (lanterns, candles, the moon) is a separate
+  layer screened over the night tint. Changing scene is a pop-up book turning
+  its page: the old cut-outs fold flat front first, the new ones stand up from
+  the back; the dream uses a spreading ink blot instead.
+- **Painted in code.** `scenery.js` and `buildings.js` generate skies, ink
+  ridges, gilded 祥云, trees with moss dots, bamboo in 个 and 介 leaf clusters,
+  banana leaves, withered lotus, Taihu rocks, walls under grey tiles with moon
+  gates, cracked-ice lattices (a square cut again and again by straight lines),
+  roofs, gatehouses, lanterns, screens, desks, candles, braziers, bed curtains.
+  Everything is seeded, so a scene is the same on every visit.
+- **The cast** are paper-cut profiles assembled from parts (`figures.js`):
+  one face with open, lowered or closed eyes; eight hairstyles; garments,
+  vests, motifs, pendants, wraps and props; six arm poses with their sleeves.
+  `cast.js` dresses them as the novel describes where it does (宝玉's purple-gold
+  crown, 宝钗's honey, rose-purple and onion-yellow with her golden locket,
+  凤姐's phoenix pin, 黛玉's crimson cloak lined with white fox). Figures fold up
+  from the page when they enter; the speaker steps forward and the others dim.
+- **A manuscript page.** The text is set vertically, right to left, on paper
+  ruled in red (朱丝栏), each character inking in. Speakers are red seals. Red
+  marginal notes (朱批) appear beside some lines in a running hand: those
+  marked with a source (甲戌本脂批, 庚辰本脂批) are real 脂砚斋 commentary, the
+  rest belong to this edition. There is a horizontal layout in the settings.
+- **Choices are flower lots** (花签) drawn from a bamboo pot. **Poems** unroll
+  on a hand scroll; famous poems appear as short excerpts. In the poetry club
+  you build your own 咏白海棠 couplet by couplet; every option keeps the same
+  tonal pattern and rhymes (门 盆 魂 痕 昏), so any mix is a regular 七律, and
+  the judge reacts to whose style it leans toward.
+
+#### Sound
+
+`audio.js` makes everything with Web Audio: a plucked string (Karplus-Strong)
+improvising phrases on the pentatonic modes (宫商角徵羽), one mood per scene,
+with octaves, bends and the occasional glissando, through a reverb made from
+decaying noise; rain and wind from filtered noise; and the small sounds (a
+pearl into jade, lots drawn, a scroll, a seal) from a few oscillators each.
+It starts on the first click or key.
+
+#### The script
+
+`story.js` holds the whole story as text in the format `engine.js` reads:
+
+```
+## ch2 | 第二折 · 西厢 | 西厢记妙词通戏语　牡丹亭艳曲警芳心
+@bg qinfang day                  stage commands: bg show pose hide fx music
+@show baoyu book r               sound tear set if goto poem note card ...
+宝玉：好，好，来把这个花扫起来。      a line; the speaker must be a known name
+（只是这一身的眼泪……）               黛玉's unspoken thought
+? 落花该往哪里去？                   a choice, then its options:
+* [heart>=3] 「……」 -> c2_bury | heart+1
+```
+
+The parser checks that every jump lands on a label and every poem, ending
+and composition exists. Simulating the story with random choices reaches all
+four endings.
+
+#### Fonts
+
+LXGW WenKai (正文), Ma Shan Zheng (titles, seals, name boards) and Zhi Mang
+Xing (the red notes), all SIL OFL 1.1, cut down to the characters the game
+uses: about 620 KB together instead of 35 MB. After changing any text, run
+`python3 apps/honglou/fonts/build.py <dir with the source TTFs>` (needs
+`fonttools` and `brotli`).
+
+#### Saving
+
+`localStorage` entry `tutu.honglou.v1`: settings, the chapters, poems and
+endings unlocked, which lines have been read (so 快进 skips only those), nine
+save pages, a quick save and the place 续读 resumes from. Chapters can be
+replayed from 回目 with the pearls as they were.
+
+`window.Honglou` exposes `state()`, `start(label, vars)`, `advance()`,
+`choose(i)`, `settle()` and `program` for driving the game from a test
+harness.
 
 ## Deployment
 
