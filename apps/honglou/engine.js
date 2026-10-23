@@ -31,7 +31,8 @@
     "凤姐": "fengjie", "贾母": "jiamu", "湘云": "xiangyun", "探春": "tanchun",
     "李纨": "liwan", "晴雯": "qingwen", "袭人": "xiren", "雪雁": "xueyan",
     "警幻": "jinghuan", "僧": "seng", "道": "dao", "傻大姐": "shadajie",
-    "鹦哥": "yingge", "众人": "", "丫鬟": "", "婆子": "", "说书人": ""
+    "鹦哥": "yingge", "绛珠": "daiyu", "神瑛": "baoyu", "妙玉": "", "莺儿": "",
+    "迎春": "", "香菱": "", "众人": "", "丫鬟": "", "婆子": "", "说书人": ""
   };
 
   function ParseError(msg, line) {
