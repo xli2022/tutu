@@ -167,13 +167,32 @@
   }
 
   // A full page turns: keep only the newest paragraph.
+  // In vertical writing the newest paragraph is the leftmost column; once
+  // it runs past the page's left edge the oldest paragraphs come off the
+  // right. A paragraph that cannot fit even alone is set a little smaller.
   function trimPage() {
+    page.scrollLeft = 0;
+    page.scrollTop = 0;
+    if (app.classList.contains("is-horizontal")) return;
     var paras = page.querySelectorAll(".para");
+    if (!paras.length) return;
+    var newest = paras[paras.length - 1];
     var i = 0;
-    while (paras.length - i > 1 && page.scrollWidth > page.clientWidth + 2) {
+    while (overflows(newest) && paras.length - i > 1) {
       paras[i].remove();
       i++;
     }
+    var size = 1;
+    while (overflows(newest) && size > 0.72) {
+      size -= 0.07;
+      newest.style.fontSize = size + "em";
+    }
+    page.scrollLeft = 0;
+  }
+
+  function overflows(p) {
+    var box = page.getBoundingClientRect(), r = p.getBoundingClientRect();
+    return r.left < box.left - 1 || r.bottom > box.bottom + 1;
   }
 
   function clearPage() { page.innerHTML = ""; }
@@ -246,7 +265,8 @@
     });
     while (pendingNotes.length) {
       var t = pendingNotes.shift();
-      var m = t.split("——");
+      // Manuscript notes carry no punctuation; a pause is a small space.
+      var m = t.replace(/[，。、；：？！]/g, "　").split("——");
       var n = el("span", "note", box);
       n.innerHTML = esc(m[0]) + (m[1] ? "<b>" + esc(m[1]) + "</b>" : "");
       notesShown.push({ el: n, age: 0 });
@@ -663,7 +683,7 @@
   /* ── Compose: build a poem couplet by couplet ───────────────────────── */
   function showCompose(id) {
     var spec = STORY.compose[id];
-    var picked = [];
+    var picked = [], picks = [];
     var counts = {};
     function render() {
       var step = picked.length;
@@ -690,6 +710,7 @@
           e.stopPropagation();
           var o = spec.options[step][+b.dataset.k];
           picked.push(o);
+          picks.push(+b.dataset.k);
           counts[o.from] = (counts[o.from] || 0) + 1;
           if (A) A.sfx("brush");
           render();
@@ -699,13 +720,10 @@
     function finish() {
       var lines = [];
       picked.forEach(function (o) { lines.push(o.lines[0] + "，" + o.lines[1] + "。"); });
-      STORY.poems[spec.result] = {
-        title: spec.title + "（你的）", by: "潇湘妃子", seal: "潇湘", lines: lines,
-        note: picked.map(function (o) { return o.note; }).join("　")
-      };
+      STORY.poems[spec.result] = composedPoem(spec, picks);
       store.unlocked.poems[spec.result] = 1;
       store.composed = store.composed || {};
-      store.composed[spec.result] = picked.map(function (o) { return spec.options[picked.indexOf(o)].indexOf(o); });
+      store.composed[spec.result] = picks.slice();
       persist();
       var effects = [];
       Object.keys(spec.tally).forEach(function (k) { effects.push({ name: spec.tally[k], op: "=", n: counts[k] || 0 }); });
@@ -1048,8 +1066,23 @@
     startPlaying();
     backlog = [];
     drawHud(vars || E.freshVars());
-    app.classList.remove("show-hud");
+    // The string of pearls is introduced in the prologue; from any later
+    // chapter it is already in her hand.
+    var fromChapter = !!label && label !== program.chapters[0].id;
+    app.classList.toggle("show-hud", fromChapter);
     machine.start(label || null, vars || null);
+    if (fromChapter) machine.stage.hud = true;
+  }
+
+  // A composed poem, rebuilt from the couplets picked for it.
+  function composedPoem(spec, picks) {
+    var lines = [], notes = [];
+    picks.forEach(function (k, slot) {
+      var o = spec.options[slot][k];
+      lines.push(o.lines[0] + "，", o.lines[1] + "。");
+      notes.push(spec.prompts[slot].split(" ")[0] + "·" + o.note);
+    });
+    return { title: spec.title, by: "潇湘妃子", seal: "潇湘", lines: lines, note: notes.join("　") };
   }
 
   $("title-menu").addEventListener("click", function (e) {
@@ -1160,6 +1193,14 @@
   }
 
   /* ── Boot ───────────────────────────────────────────────────────────── */
+  if (store.composed) {
+    Object.keys(store.composed).forEach(function (id) {
+      Object.keys(STORY.compose).forEach(function (k) {
+        var spec = STORY.compose[k];
+        if (spec.result === id && store.composed[id].length === spec.slots) STORY.poems[id] = composedPoem(spec, store.composed[id]);
+      });
+    });
+  }
   document.documentElement.style.setProperty("--paper-img", "url(" + P.paperURL(256, 3, 0.8, true) + ")");
   S.mount(wrap);
   window.addEventListener("resize", layout);

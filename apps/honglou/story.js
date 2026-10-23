@@ -796,7 +796,7 @@
 黛玉：可不是，我这就是回去的时候儿了。
 说着，便回身笑着出来了，仍旧不用丫头们搀扶，自己却走得比往常飞快。
 @bg xiaoxiang snow
-@show daiyu ill c
+@show daiyu cloak c
 刚到潇湘馆门口，紫鹃说了一声：“阿弥陀佛，可到了家了！”只这一句话没说完，只见黛玉身子往前一栽，“哇”的一声，一口血直吐出来。
 @flash #8e1f22
 @bg xiaoxiang_in winter

@@ -323,6 +323,7 @@ button { font: inherit; color: inherit; }
   position: relative;
   height: 100%;
   overflow: hidden;
+  overflow-anchor: none;
   writing-mode: vertical-rl;
   font-size: var(--fs);
   line-height: var(--lh);
@@ -418,21 +419,21 @@ button { font: inherit; color: inherit; }
 /* ── Tools ─────────────────────────────────────────────────────────── */
 .tools {
   position: absolute;
-  left: calc(var(--u) * 20); right: calc(var(--u) * 20); bottom: calc(var(--u) * 18);
+  left: calc(var(--u) * 14); right: calc(var(--u) * 14); bottom: calc(var(--u) * 20);
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: calc(var(--u) * 6);
+  justify-content: space-between;
+  gap: calc(var(--u) * 2);
 }
 .tools button {
   border: 0;
-  padding: max(4px, calc(var(--u) * 6)) max(5px, calc(var(--u) * 8));
-  min-height: 28px;
+  padding: max(3px, calc(var(--u) * 5)) max(3px, calc(var(--u) * 5));
+  min-height: 26px;
   background: transparent;
   color: var(--ink-2);
   font-family: var(--font-text);
-  font-size: max(12px, calc(var(--u) * 19));
-  letter-spacing: .08em;
+  font-size: max(11px, calc(var(--u) * 17));
+  letter-spacing: 0;
+  white-space: nowrap;
   border-radius: calc(var(--u) * 4);
   cursor: pointer;
   transition: background .2s ease, color .2s ease;
