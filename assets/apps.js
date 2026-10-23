@@ -26,4 +26,17 @@ window.TUTU_APPS = [
     cta: "Open",
     status: "live",
   },
+  {
+    slug: "honglou",
+    name: "还泪记",
+    tagline: "A Dream of the Red Chamber visual novel",
+    blurb:
+      "You are 林黛玉, come down to the world to repay a debt of dew with every " +
+      "tear of a lifetime. A paper-cut diorama, a manuscript in vertical script, " +
+      "flower lots for choices, four endings. In Chinese.",
+    tags: ["Visual novel", "中文"],
+    accent: ["#c94450", "#2c3a6b"],
+    icon: "pearls",
+    status: "live",
+  },
 ];

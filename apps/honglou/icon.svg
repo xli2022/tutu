@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2c3a6b"/><stop offset="1" stop-color="#141c3c"/></linearGradient>
+    <radialGradient id="pearl" cx=".36" cy=".32" r=".7"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#e0475a"/><stop offset="1" stop-color="#7e1620"/></radialGradient>
+    <radialGradient id="jade" cx=".35" cy=".3" r=".8"><stop offset="0" stop-color="#f4faf3"/><stop offset=".6" stop-color="#cfe2d3"/><stop offset="1" stop-color="#9fbea9"/></radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <path d="M32 4V30" stroke="#d8b46a" stroke-width="1.6"/>
+  <circle cx="32" cy="44" r="15" fill="url(#jade)"/>
+  <circle cx="32" cy="44" r="5.5" fill="#141c3c"/>
+  <circle cx="32" cy="22" r="7.5" fill="url(#pearl)"/>
+</svg>

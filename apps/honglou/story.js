@@ -966,17 +966,17 @@
   /* Poems are shown as excerpts (节): the famous lines, not whole texts.
      Each entry is one column per line; "" leaves a gap between stanzas. */
   var poems = {
-    wangningmei: { title: "枉凝眉（节）", by: "红楼梦曲", seal: "警幻",
+    wangningmei: { title: "枉凝眉", by: "红楼梦曲　节选", seal: "警幻",
       lines: ["一个是阆苑仙葩，", "一个是美玉无瑕。", "", "想眼中能有多少泪珠儿，", "怎经得秋流到冬尽，", "春流到夏！"] },
-    mudan: { title: "牡丹亭（节）", by: "梨香院中所唱", seal: "戏文",
+    mudan: { title: "牡丹亭", by: "梨香院中所唱　节选", seal: "戏文",
       lines: ["原来姹紫嫣红开遍，", "似这般都付与断井颓垣。", "良辰美景奈何天，", "赏心乐事谁家院。", "", "则为你如花美眷，", "似水流年……"] },
-    zanghua: { title: "葬花吟（节）", by: "潇湘妃子", seal: "潇湘",
+    zanghua: { title: "葬花吟", by: "潇湘妃子　节选", seal: "潇湘",
       lines: ["花谢花飞花满天，", "红消香断有谁怜？", "", "一年三百六十日，", "风刀霜剑严相逼。", "", "质本洁来还洁去，", "强于污淖陷渠沟。", "", "侬今葬花人笑痴，", "他年葬侬知是谁？", "一朝春尽红颜老，", "花落人亡两不知！"] },
-    tipa: { title: "题帕（其一）", by: "潇湘妃子", seal: "潇湘",
+    tipa: { title: "题帕", by: "潇湘妃子　其一", seal: "潇湘",
       lines: ["眼空蓄泪泪空垂，", "暗洒闲抛却为谁？", "尺幅鲛绡劳惠赠，", "为君那得不伤悲！"] },
-    qiuchuang: { title: "秋窗风雨夕（节）", by: "潇湘妃子", seal: "潇湘",
+    qiuchuang: { title: "秋窗风雨夕", by: "潇湘妃子　节选", seal: "潇湘",
       lines: ["秋花惨淡秋草黄，", "耿耿秋灯秋夜长。", "已觉秋窗秋不尽，", "那堪风雨助凄凉！", "", "不知风雨几时休，", "已教泪洒窗纱湿。"] },
-    lianju: { title: "凹晶馆联句（节）", by: "枕霞旧友　潇湘妃子", seal: "凹晶",
+    lianju: { title: "凹晶馆联句", by: "湘云　黛玉　节选", seal: "凹晶",
       lines: ["三五中秋夕，", "清游拟上元。", "……", "寒塘渡鹤影，", "冷月葬花魂。"], note: "一作「冷月葬诗魂」" },
     qinggeng: { title: "归彼大荒", by: "一僧一道", seal: "大荒",
       lines: ["我所居兮，青埂之峰；", "我所游兮，鸿蒙太空。", "谁与我逝兮，吾谁与从？", "渺渺茫茫兮，归彼大荒。"] },

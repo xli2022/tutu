@@ -638,6 +638,12 @@
       if (pages.length > 1) html += '<p class="poem-pager">' + (pi + 1) + " / " + pages.length + "</p>";
       openInterlude("interlude-dark", html, next);
       var paper = inter.querySelector(".scroll-paper"), inner = inter.querySelector(".scroll-inner");
+      // As tall as the longest column, not the whole screen.
+      var u = S.scale(), lineFS = Math.max(18, u * 37), titleFS = Math.max(24, u * 54), pad = Math.max(20, u * 56);
+      var longest = 0;
+      lines.forEach(function (l) { longest = Math.max(longest, Array.from(l).length * lineFS * 1.08); });
+      if (pi === 0) longest = Math.max(longest, Array.from(poem.title).length * titleFS * 1.12 + (poem.by ? Array.from(poem.by).length * Math.max(13, u * 24) * 1.1 + 30 : 0));
+      inter.querySelector(".scroll").style.height = Math.min(window.innerHeight * 0.88, Math.max(u * 360, longest + pad * 2 + 20)) + "px";
       inter.querySelectorAll(".poem-line").forEach(function (n) { n.style.setProperty("--spd", "70ms"); });
       requestAnimationFrame(function () {
         paper.style.width = inner.scrollWidth + "px";
@@ -705,6 +711,8 @@
         pickHtml = '<p class="compose-hint">诗成。点击纸面，交卷。</p>';
       }
       openInterlude("interlude-dark compose-wrap", '<div class="compose">' + sheet + pickHtml + "</div>", step >= spec.slots ? finish : null);
+      var cu = S.scale(), cfs = Math.max(18, cu * 36);
+      inter.querySelector(".compose-sheet").style.setProperty("--sheet-h", Math.max(Array.from(spec.title).length * cfs * 1.3 + 40, 7 * cfs * 1.16) + Math.max(36, cu * 96) + "px");
       inter.querySelectorAll(".compose-pick .stick").forEach(function (b) {
         b.addEventListener("click", function (e) {
           e.stopPropagation();

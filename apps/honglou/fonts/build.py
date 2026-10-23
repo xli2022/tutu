@@ -17,7 +17,8 @@ Sources (all SIL Open Font License 1.1, licences alongside):
 What goes where:
   wenkai       every character in the game's files (story, interface)
   mashanzheng  the brush lettering: chapter titles, seals, speaker names,
-               poem and ending titles, and the interface's labels
+               poem and ending titles, the interface's labels, and the
+               words painted into scenes (name boards, the Stone)
   zhimangxing  the red marginal notes (@note lines in story.js)
 """
 import os
@@ -60,6 +61,7 @@ def main(src):
         brush |= cjk(field)
     brush |= cjk(" ".join(re.findall(r'"([一-鿿]{1,4})"\s*:', engine)))
     brush |= cjk(ui)
+    brush |= cjk(read("scenes.js") + read("scenes-rooms.js"))  # plaques and the Stone
     brush |= cjk(PUNCT)
 
     hand = set()

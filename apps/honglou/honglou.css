@@ -335,6 +335,7 @@ button { font: inherit; color: inherit; }
 }
 .page {
   position: relative;
+  width: 100%;
   height: 100%;
   overflow: hidden;
   overflow-anchor: none;
@@ -823,10 +824,10 @@ button { font: inherit; color: inherit; }
   font-weight: normal;
 }
 .poem-by {
+  align-self: flex-end;
   font-size: max(13px, calc(var(--u) * 24));
   color: var(--ink-faded);
   margin: 0 0 0 max(12px, calc(var(--u) * 30));
-  padding-top: max(40px, calc(var(--u) * 150));
 }
 .poem-line {
   font-size: max(18px, calc(var(--u) * 37));
@@ -910,10 +911,9 @@ button { font: inherit; color: inherit; }
 .compose {
   display: flex;
   flex-direction: row-reverse;
-  align-items: stretch;
+  align-items: center;
   gap: max(14px, calc(var(--u) * 40));
   max-width: 96vw;
-  height: min(88vh, calc(var(--u) * 820));
   cursor: default;
 }
 .compose-sheet {
@@ -927,7 +927,8 @@ button { font: inherit; color: inherit; }
   font-size: max(18px, calc(var(--u) * 36));
   line-height: 1.9;
   letter-spacing: .12em;
-  min-width: max(240px, calc(var(--u) * 520));
+  height: var(--sheet-h, 60vh);
+  max-height: 90vh;
 }
 .compose-sheet h3 { font-family: var(--font-brush); font-weight: normal; margin: 0 0 0 .6em; font-size: 1.2em; }
 .compose-sheet .rule { color: var(--zhu); font-size: .6em; margin-left: .8em; }

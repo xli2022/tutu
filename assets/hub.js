@@ -22,6 +22,16 @@
       '<path d="M8 82 C24 76 40 80 56 75 S80 72 92 74 V90 H8 Z" fill="#fff"/>' +
       '<path d="M8 82 C24 76 40 80 56 75 S80 72 92 74 V90 H8 Z" fill="url(#hubGloss)"/>' +
       "</g></svg>",
+    // A string of tear-pearls above the jade they are repaid into.
+    pearls:
+      '<svg viewBox="0 0 100 100" aria-hidden="true">' +
+      '<path d="M50 6V40" stroke="#fff" stroke-width="2.5" opacity=".8"/>' +
+      '<circle cx="50" cy="20" r="6.5" fill="#fff" opacity=".75"/>' +
+      '<circle cx="50" cy="36" r="8" fill="#fff"/>' +
+      '<circle cx="50" cy="36" r="8" fill="url(#hubGloss)"/>' +
+      '<circle cx="50" cy="68" r="22" fill="none" stroke="#fff" stroke-width="13"/>' +
+      '<circle cx="50" cy="68" r="22" fill="none" stroke="url(#hubGloss)" stroke-width="13" opacity=".6"/>' +
+      "</svg>",
   };
 
   function card(app) {
