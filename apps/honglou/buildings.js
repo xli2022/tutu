@@ -71,6 +71,31 @@
     return "M" + (x - w / 2) + " " + (y - h / 2) + "h" + w + "v" + h + "h" + (-w) + "Z";
   }
 
+  // 冰裂纹: cracked ice. A square is cut again and again by straight
+  // lines between two of its edges, so every crack ends on another crack.
+  function iceCracks(cx, cy, r, seed, depth) {
+    var rnd = P.rng(seed), d = "";
+    function cut(poly, k) {
+      if (k <= 0 || poly.length < 3) return;
+      var n = poly.length, i = Math.floor(rnd() * n), j = (i + 1 + Math.floor(rnd() * (n - 2))) % n;
+      if (i === j) return;
+      var ta = 0.3 + rnd() * 0.4, tb = 0.3 + rnd() * 0.4;
+      var a0 = poly[i], a1 = poly[(i + 1) % n], b0 = poly[j], b1 = poly[(j + 1) % n];
+      var pa = [a0[0] + (a1[0] - a0[0]) * ta, a0[1] + (a1[1] - a0[1]) * ta];
+      var pb = [b0[0] + (b1[0] - b0[0]) * tb, b0[1] + (b1[1] - b0[1]) * tb];
+      d += "M" + n1(pa[0]) + " " + n1(pa[1]) + "L" + n1(pb[0]) + " " + n1(pb[1]);
+      var left = [pa], right = [pb];
+      for (var q = (i + 1) % n; q !== (j + 1) % n; q = (q + 1) % n) left.push(poly[q]);
+      left.push(pb);
+      for (var q2 = (j + 1) % n; q2 !== (i + 1) % n; q2 = (q2 + 1) % n) right.push(poly[q2]);
+      right.push(pa);
+      cut(left, k - 1);
+      cut(right, k - 1);
+    }
+    cut([[cx - r, cy - r], [cx + r, cy - r], [cx + r, cy + r], [cx - r, cy + r]], depth);
+    return d;
+  }
+
   // A window or leaking window: whatever is behind (`behind` fill or a
   // `view` SVG string clipped to the opening), then lattice, then frame.
   B.lattice = function (defs, o) {
@@ -87,12 +112,7 @@
       for (var gx = -8; gx <= 8; gx++) bars += "M" + n1(o.x + gx * step) + " " + n1(o.y - r * 2) + "V" + n1(o.y + r * 2);
       for (var gy = -8; gy <= 8; gy++) bars += "M" + n1(o.x - r * 2) + " " + n1(o.y + gy * step) + "H" + n1(o.x + r * 2);
     } else if (pat === "ice") {
-      // 冰裂纹: cracked-ice polygons.
-      var rr = P.rng(o.seed || 9);
-      for (var c = 0; c < 26; c++) {
-        var cx0 = o.x + (rr() - 0.5) * r * 2.2, cy0 = o.y + (rr() - 0.5) * r * 2.2, a = rr() * 6.28, l = r * (0.4 + rr() * 0.7);
-        bars += "M" + n1(cx0) + " " + n1(cy0) + "l" + n1(Math.cos(a) * l) + " " + n1(Math.sin(a) * l);
-      }
+      bars = iceCracks(o.x, o.y, r * 1.1, o.seed || 9, o.cells || 5);
     }
     var inner = o.view ? g({ "clip-path": "url(#" + cid + ")" }, o.view) : path(d, o.behind || "#cdd2bf");
     if (o.paper) inner += path(d, o.paper, { opacity: o.paperOp || 0.6 });
@@ -303,10 +323,12 @@
       out += path(S([[o.x0 + 60, sy], [o.x0 + 70, sy - 34], [o.x0 + 110, sy - 40], [o.x0 + 250, sy - 30], [o.x1 - 70, sy - 26], [o.x1 - 40, sy - 6], [o.x1 - 50, sy + 4], [o.x0 + 60, sy + 4]], true), "#3a2a3a", { opacity: 0.55 });
       out += tag("circle", { cx: n1(o.x0 + 92), cy: n1(sy - 46), r: 24, fill: "#3a2a3a", opacity: 0.55 });
     }
-    var gauze = X.grad(defs, 0, 0, 0, 1, [[0, o.curtain || "#e9b9b0", 0.78], [1, o.curtain || "#e9b9b0", 0.5]]);
-    var mid = (o.x0 + o.x1) / 2;
-    out += path(S([[o.x0 + 6, o.y0 + 6], [o.x0 + (mid - o.x0) * (o.open ? 0.45 : 1), o.y0 + 6], [o.x0 + (mid - o.x0) * (o.open ? 0.32 : 0.92), o.y1 - 70], [o.x0 + 6, o.y1 - 70]], true), gauze);
-    out += path(S([[o.x1 - 6, o.y0 + 6], [o.x1 - (o.x1 - mid) * (o.open ? 0.45 : 1), o.y0 + 6], [o.x1 - (o.x1 - mid) * (o.open ? 0.32 : 0.92), o.y1 - 70], [o.x1 - 6, o.y1 - 70]], true), gauze);
+    var gauze = X.grad(defs, 0, 0, 0, 1, [[0, o.curtain || "#e9b9b0", 0.72], [1, o.curtain || "#e9b9b0", 0.46]]);
+    var mid = (o.x0 + o.x1) / 2, top = o.y0 + 6, bot = o.y1 - 70;
+    var lw = (mid - o.x0) * (o.open ? 0.42 : 1.02), lb = (mid - o.x0) * (o.open ? 0.3 : 0.94);
+    var rw = (o.x1 - mid) * (o.open ? 0.42 : 1.02), rb = (o.x1 - mid) * (o.open ? 0.3 : 0.94);
+    out += path(S([[o.x0 + 6, top, 0], [o.x0 + lw, top, 0], [o.x0 + lw * 0.97, (top + bot) / 2, 0.6], [o.x0 + lb, bot, 0], [o.x0 + 6, bot, 0]], true), gauze);
+    out += path(S([[o.x1 - 6, top, 0], [o.x1 - rw, top, 0], [o.x1 - rw * 0.97, (top + bot) / 2, 0.6], [o.x1 - rb, bot, 0], [o.x1 - 6, bot, 0]], true), gauze);
     var folds = "";
     for (var i = 0; i < 12; i++) {
       var fx = o.x0 + 20 + i * (o.x1 - o.x0 - 40) / 11;

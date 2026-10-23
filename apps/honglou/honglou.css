@@ -152,6 +152,8 @@ button { font: inherit; color: inherit; }
 .flicker { animation: flicker 2.6s ease-in-out infinite; }
 .flame { animation: flame .9s ease-in-out infinite alternate; }
 .pulse { animation: pulse 3.4s ease-in-out infinite; }
+.rainfall { animation: rainfall .45s linear infinite; }
+@keyframes rainfall { from { transform: translate(6px, -46px); } to { transform: translate(-2px, 46px); } }
 @keyframes twinkle { from { opacity: .15; } to { opacity: .95; } }
 @keyframes drift { from { transform: translateX(-40px); } to { transform: translateX(40px); } }
 @keyframes flicker { 0%, 100% { opacity: 1; } 30% { opacity: .82; } 55% { opacity: .95; } 70% { opacity: .78; } }
