@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>红楼梦 · 还泪记 — tutu</title>
+    <meta name="description" content="一部《红楼梦》视觉小说：你是林黛玉，以一生的眼泪偿还灌溉之恩。剪纸立体书的画风，竖排的抄本，朱批在页边。" />
+    <meta name="theme-color" content="#1b1512" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="honglou.css" />
+  </head>
+  <body>
+    <div class="app is-title" id="app">
+      <!-- The stage: a 1600 × 900 paper diorama, scaled to fit. -->
+      <div class="stage-wrap" id="stage-wrap"></div>
+
+      <!-- Pearls of tears, the red marginal notes, and the stage chrome
+           sit over the stage at its on-screen size. -->
+      <div class="hud" id="hud" aria-hidden="true">
+        <div class="hud-cord"></div>
+        <div class="hud-knot"></div>
+        <div class="hud-pearls" id="hud-pearls"></div>
+        <div class="hud-jade" id="hud-jade"></div>
+        <div class="hud-word" id="hud-word"></div>
+      </div>
+      <div class="notes" id="notes" aria-hidden="true"></div>
+
+      <!-- The manuscript page the story is written on. -->
+      <section class="panel" id="panel" aria-label="正文">
+        <div class="page" id="page" aria-hidden="true"></div>
+        <p class="sr-only" id="live" aria-live="polite"></p>
+        <nav class="tools" id="tools" aria-label="功能">
+          <button type="button" data-act="log" title="回顾 (↑)">回顾</button>
+          <button type="button" data-act="auto" title="自动 (A)">自动</button>
+          <button type="button" data-act="skip" title="快进 (S)">快进</button>
+          <button type="button" data-act="save" title="存档">存档</button>
+          <button type="button" data-act="load" title="读档">读档</button>
+          <button type="button" data-act="config" title="设置 (Esc)">设置</button>
+          <button type="button" data-act="hide" title="隐去文字 (H)">隐</button>
+          <button type="button" data-act="home" title="回到卷首">卷首</button>
+        </nav>
+      </section>
+
+      <!-- Flower lots (花签) to draw from when the story asks a choice. -->
+      <div class="choices" id="choices" role="group" aria-label="抉择" hidden>
+        <p class="choice-prompt" id="choice-prompt"></p>
+        <div class="sticks" id="sticks"></div>
+        <div class="lot-pot" aria-hidden="true"></div>
+      </div>
+
+      <!-- Title screen -->
+      <section class="title" id="title" aria-label="卷首">
+        <div class="title-brand">
+          <h1 class="title-name"><span>红</span><span>楼</span><span>梦</span></h1>
+          <p class="title-sub">还泪记</p>
+          <span class="seal seal-title" aria-hidden="true">绛珠</span>
+        </div>
+        <p class="title-epigraph" aria-label="题记">满纸荒唐言<br />一把辛酸泪<br />都云作者痴<br />谁解其中味</p>
+        <nav class="title-menu" id="title-menu" aria-label="卷首">
+          <button type="button" data-act="new">开卷</button>
+          <button type="button" data-act="continue" id="btn-continue">续读</button>
+          <button type="button" data-act="chapters">回目</button>
+          <button type="button" data-act="poems">诗稿</button>
+          <button type="button" data-act="config">设置</button>
+        </nav>
+        <a class="title-back" href="../../" aria-label="Back to tutu">tutu</a>
+        <button type="button" class="title-sound" id="title-sound" aria-label="声音"></button>
+      </section>
+
+      <!-- Full-screen interludes: chapter titles, cards, poems, endings. -->
+      <section class="interlude" id="interlude" hidden></section>
+
+      <!-- Menus: save, load, settings, backlog, poems, chapters. -->
+      <div class="sheet-wrap" id="sheet-wrap" hidden>
+        <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+          <header class="sheet-head">
+            <h2 class="sheet-title" id="sheet-title"></h2>
+            <button type="button" class="sheet-close" id="sheet-close" aria-label="关闭">×</button>
+          </header>
+          <div class="sheet-body" id="sheet-body"></div>
+        </section>
+      </div>
+
+      <div class="toast" id="toast" role="status" hidden></div>
+    </div>
+
+    <script src="paint.js"></script>
+    <script src="scenes.js"></script>
+    <script src="figures.js"></script>
+    <script src="engine.js"></script>
+    <script src="stage.js"></script>
+    <script src="story.js"></script>
+    <script src="audio.js"></script>
+    <script src="honglou.js"></script>
+  </body>
+</html>
